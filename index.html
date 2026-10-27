@@ -236,6 +236,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-novo" aria-selected="true" data-view="novo">Memorando</button>
       <button class="tab" role="tab" id="tab-painel" aria-selected="false" data-view="painel">Painel gerencial</button>
+      <button class="tab" role="tab" id="tab-cfg" aria-selected="false" data-view="config" hidden>Configurações</button>
       <button class="tab" role="tab" id="tab-arq" aria-selected="false" data-view="arquivo">Arquivo <span class="count" id="countArq">0</span></button>
     </nav>
   </header>
@@ -290,7 +291,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
             <div class="f half"><label for="e_natureza">Natureza jurídica</label><input type="text" id="e_natureza"></div>
             <div class="f"><label for="e_capital">Capital social</label><input type="text" id="e_capital"></div>
             <div class="f"><label for="e_nire">NIRE</label><input type="text" id="e_nire"><a class="small" href="https://www.simplifica.es.gov.br/s/consultar-empresa" target="_blank" rel="noopener" style="color:var(--blue)">Consultar na JUCEES (login gov.br)</a></div>
-            <div class="f"><label for="e_ie">Inscrição estadual</label><input type="text" id="e_ie"><button class="btn link small" id="btnIE" type="button" style="padding:0;justify-content:flex-start" hidden>Buscar na SEFAZ</button><span class="small muted" id="ieInfo"></span></div>
+            <div class="f"><label for="e_ie">Inscrição estadual</label><input type="text" id="e_ie"><div id="ieBox" class="row" style="gap:6px;align-items:center;margin-top:2px" hidden><select id="ieCert" aria-label="Certificado para a consulta" style="padding:4px 6px;font-size:13px;flex:1;min-width:0"></select><button class="btn sm" id="btnIE" type="button">Buscar na SEFAZ</button></div><span class="small muted" id="ieInfo"></span></div>
             <div class="f"><label for="e_im">Inscrição municipal</label><input type="text" id="e_im"></div>
             <div class="f wide"><label for="e_endereco">Endereço</label><input type="text" id="e_endereco"></div>
             <div class="f wide"><span class="lbl">Quadro societário</span>
@@ -454,6 +455,25 @@ body.locked .wrap,body.locked .toast{display:none!important}
     </div>
   </div>
 
+  <div id="view-config" hidden>
+    <div class="grid" style="grid-template-columns:minmax(0,1fr)">
+      <section class="card">
+        <h2>Certificados digitais</h2>
+        <p class="hint">Usados para consultar a inscrição estadual na SEFAZ. Importe quantos precisar e escolha qual usar em cada consulta. O arquivo fica só no servidor e a senha fica cifrada.</p>
+        <div class="tbl-wrap"><table class="t" id="certTab"></table></div>
+        <h2 style="margin-top:18px">Importar certificado A1</h2>
+        <div class="fields">
+          <div class="f"><label for="cf_arq">Arquivo (.pfx ou .p12)</label><input type="file" id="cf_arq" accept=".pfx,.p12,application/x-pkcs12"></div>
+          <div class="f"><label for="cf_senha">Senha do certificado</label><input type="password" id="cf_senha" autocomplete="new-password" style="font:15px var(--f-body);color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:8px 10px"></div>
+          <div class="f"><label for="cf_apelido">Apelido (opcional)</label><input type="text" id="cf_apelido" placeholder="Ex.: Facilitar e-CNPJ"></div>
+          <div class="f" style="justify-content:flex-end"><label class="chip" style="align-self:flex-start"><input type="checkbox" id="cf_padrao">Usar como padrão</label></div>
+        </div>
+        <div class="row" style="margin-top:12px"><button class="btn primary" id="btnCertImportar" type="button">Importar certificado</button><span class="small" id="cfMsg"></span></div>
+        <p class="small muted" style="margin-top:12px">A SEFAZ-ES confere o CNPJ de quem consulta. Um e-CPF pode receber "Rejeição 257 – solicitante não habilitado"; nesse caso use o e-CNPJ de uma empresa habilitada a emitir NF-e no ES.</p>
+      </section>
+    </div>
+  </div>
+
   <div id="view-arquivo" hidden>
     <div class="toolbar">
       <div class="f"><label for="s_q">Pesquisar</label><input type="search" id="s_q" placeholder="Número, empresa, fantasia, CNPJ, regime ou responsável"></div>
@@ -592,6 +612,7 @@ async function api(acao,body){
 let loginOk=null;
 function pedirLogin(msg){document.body.classList.add("locked");$("login").hidden=false;$("lg_msg").textContent=msg||"";if(CRED)$("lg_nome").value=CRED.nome||"";setTimeout(()=>$((CRED&&CRED.nome)?"lg_senha":"lg_nome").focus(),50)}
 async function carregarAPI(){
+  if(!CERTS_OK) carregarCerts();
   try{const j=await api("listar");ARQ=(j.memorandos||[]);renderNumero();renderLista();renderHist();if(!$("view-painel").hidden)renderPainel();if(!$("dbNotice").dataset.keep)$("dbNotice").hidden=true}
   catch(e){$("dbNotice").hidden=false;$("dbNotice").textContent="Não foi possível carregar o arquivo: "+e.message}
 }
@@ -901,9 +922,12 @@ async function buscarIE(auto){
   if(MODO!=="api"||buscandoIE) return;
   const c=dig($("e_cnpj").value||$("q_cnpj").value); if(c.length!==14){if(!auto)toast("Informe o CNPJ primeiro.");return}
   const m=/\/([A-Z]{2})\b/.exec($("e_endereco").value||""); const uf=(m&&m[1])||"ES";
+  if(!CERTS.length&&auto) return;
   buscandoIE=true; $("ieInfo").textContent="Consultando a SEFAZ…";
   try{
-    const r=await api("ie&cnpj="+c+"&uf="+uf);
+    if(!CERTS.length){$("ieInfo").textContent=auto?"":"Importe um certificado em Configurações para consultar a IE.";return}
+    const cert=$("ieCert").value;
+    const r=await api("ie&cnpj="+c+"&uf="+uf+"&cert="+encodeURIComponent(cert));
     const cads=r.cadastros||[];
     if(!cads.length){$("ieInfo").textContent="SEFAZ: "+(r.cStat?r.cStat+" – ":"")+(r.xMotivo||"sem inscrição estadual encontrada");return}
     const hab=cads.find(x=>x.situacao==="Habilitado")||cads[0];
@@ -911,6 +935,48 @@ async function buscarIE(auto){
     $("ieInfo").textContent="SEFAZ: IE "+hab.ie+" · "+hab.situacao+(hab.regime?" · "+hab.regime:"")+(cads.length>1?" · "+cads.length+" inscrições":"");
   }catch(e){$("ieInfo").textContent="SEFAZ: "+(e.message||"não foi possível consultar")}
   finally{buscandoIE=false}
+}
+
+/* ---------- certificados (versão hospedada) ---------- */
+let CERTS=[], CERTS_OK=false, certConfirm=null;
+function nomeCert(c){return (c.apelido?c.apelido+" – ":"")+(c.titular||"Certificado")+(c.documento?" ("+c.tipo+" "+(c.documento.length===14?fmtCnpj(c.documento):c.documento)+")":"")}
+async function carregarCerts(){
+  try{const j=await api("certlistar");CERTS=j.certificados||[];CERTS_OK=true}catch(e){CERTS=[];$("cfMsg").textContent=e.message;return}
+  renderCerts();
+}
+function renderCerts(){
+  const sel=$("ieCert"), cur=sel.value;
+  sel.innerHTML=CERTS.map(c=>'<option value="'+esc(c.id)+'"'+((cur?cur===c.id:c.padrao)?" selected":"")+'>'+esc(nomeCert(c))+(c.padrao?" · padrão":"")+'</option>').join("");
+  $("ieBox").hidden=MODO!=="api"||!CERTS.length;
+  if(MODO==="api"&&!CERTS.length) $("ieInfo").innerHTML='Para buscar a IE na SEFAZ, importe um certificado em <a href="#" id="lkCfg" style="color:var(--blue)">Configurações</a>.';
+  const lk=$("lkCfg"); if(lk) lk.onclick=e=>{e.preventDefault();showView("config")};
+  const hoje=hojeISO(), em30=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
+  $("certTab").innerHTML=CERTS.length?'<thead><tr><th>Padrão</th><th>Certificado</th><th>Validade</th><th>Importado</th><th></th></tr></thead><tbody>'+CERTS.map(c=>
+    '<tr><td><input type="radio" name="certPadrao" data-cpad="'+esc(c.id)+'" '+(c.padrao?"checked":"")+' aria-label="Usar como padrão"></td>'+
+    '<td><b>'+esc(c.apelido||c.titular||"Certificado")+'</b><div class="small muted">'+esc(c.apelido?c.titular:"")+' '+esc(c.tipo||"")+' '+esc(c.documento?(c.documento.length===14?fmtCnpj(c.documento):c.documento):"")+'</div>'+(c.tipo==="e-CPF"?'<span class="pill v">pode ser recusado pela SEFAZ-ES</span>':'')+'</td>'+
+    '<td class="num">'+(c.validade?'<span class="pill '+(c.validade<hoje?"c":c.validade<em30?"v":"okp")+'">'+esc(br(c.validade))+'</span>':"—")+'</td>'+
+    '<td class="small">'+(c.origem==="ambiente"?"Variável de ambiente":esc((c.enviadoPor||"—")+" em "+dataHora(c.enviadoEm)))+'</td>'+
+    '<td>'+(c.origem==="ambiente"?"":certConfirm===c.id?'<span class="confirm">Remover? <button class="btn sm" data-crmok="'+esc(c.id)+'">Remover</button><button class="btn sm link" data-crmno="1">Voltar</button></span>':'<button class="btn sm link" data-crm="'+esc(c.id)+'">Remover</button>')+'</td></tr>').join("")+'</tbody>'
+    :'<tbody><tr><td class="muted">Nenhum certificado importado ainda.</td></tr></tbody>';
+  const t=$("certTab");
+  t.querySelectorAll("[data-cpad]").forEach(r=>r.onchange=async()=>{try{const j=await api("certpadrao",{id:r.dataset.cpad});CERTS=j.certificados||[];$("ieCert").value="";renderCerts();toast("Certificado padrão alterado.")}catch(e){toast(e.message)}});
+  t.querySelectorAll("[data-crm]").forEach(b=>b.onclick=()=>{certConfirm=b.dataset.crm;renderCerts()});
+  t.querySelectorAll("[data-crmno]").forEach(b=>b.onclick=()=>{certConfirm=null;renderCerts()});
+  t.querySelectorAll("[data-crmok]").forEach(b=>b.onclick=async()=>{certConfirm=null;try{const j=await api("certremover",{id:b.dataset.crmok});CERTS=j.certificados||[];$("ieCert").value="";renderCerts();toast("Certificado removido.")}catch(e){toast(e.message)}});
+}
+async function importarCert(){
+  const f=$("cf_arq").files[0], senha=$("cf_senha").value, msg=$("cfMsg");
+  if(!f){msg.style.color="var(--bad)";msg.textContent="Escolha o arquivo .pfx ou .p12.";return}
+  if(!senha){msg.style.color="var(--bad)";msg.textContent="Informe a senha do certificado.";return}
+  const btn=$("btnCertImportar");btn.disabled=true;msg.style.color="";msg.textContent="Importando…";
+  try{
+    const buf=new Uint8Array(await f.arrayBuffer()); let bin="";for(let i=0;i<buf.length;i++)bin+=String.fromCharCode(buf[i]);
+    const j=await api("certenviar",{pfx:btoa(bin),senha,apelido:$("cf_apelido").value.trim(),padrao:$("cf_padrao").checked,usuario:quem()});
+    CERTS=j.certificados||[];$("ieCert").value="";renderCerts();
+    $("cf_arq").value="";$("cf_senha").value="";$("cf_apelido").value="";$("cf_padrao").checked=false;
+    msg.style.color="var(--ok)";const c=CERTS.find(x=>x.id===j.id);msg.textContent="Certificado importado"+(c?": "+nomeCert(c):"")+".";
+  }catch(e){msg.style.color="var(--bad)";msg.textContent=e.message}
+  finally{btn.disabled=false}
 }
 
 /* ---------- montagem do memorando (blocos) ---------- */
@@ -1494,9 +1560,9 @@ async function painelPdf(){
 
 /* ---------- views ---------- */
 function showView(vw){
-  $("view-novo").hidden=vw!=="novo";$("view-arquivo").hidden=vw!=="arquivo";$("view-painel").hidden=vw!=="painel";
+  $("view-novo").hidden=vw!=="novo";$("view-arquivo").hidden=vw!=="arquivo";$("view-painel").hidden=vw!=="painel";$("view-config").hidden=vw!=="config";$("tab-cfg").setAttribute("aria-selected",vw==="config");
   $("tab-novo").setAttribute("aria-selected",vw==="novo");$("tab-arq").setAttribute("aria-selected",vw==="arquivo");$("tab-painel").setAttribute("aria-selected",vw==="painel");
-  if(vw==="arquivo")renderLista(); else if(vw==="painel")renderPainel(); else schedulePreview();
+  if(vw==="arquivo")renderLista(); else if(vw==="painel")renderPainel(); else if(vw==="config")carregarCerts(); else schedulePreview();
 }
 
 /* ---------- eventos ---------- */
@@ -1517,6 +1583,7 @@ $("btnAddSv").onclick=()=>{let it=$("addSv").value.trim();const dd=dig(it);if(dd
   if(!/^\d{2}\.\d{2}$/.test(it)){toast("Código no formato 00.00.");return}
   S.svExtra.push({item:it,desc:$("addSvDesc").value.trim()||LC116[it]||"",anexo:$("addSvAnx").value});$("addSv").value="";$("addSvDesc").value="";$("addSvAnx").value="";renderServicos();changed()};
 $("btnIE").onclick=()=>buscarIE(false);
+$("btnCertImportar").onclick=importarCert;
 $("btnAddSocio").onclick=()=>{S.socios.push({nome:"",qualificacao:"",entrada:""});renderSocios();changed();setTimeout(()=>{const el=$("so_nome_"+(S.socios.length-1));if(el)el.focus()},30)};
 $("btnAddContato").onclick=()=>{S.contatos.push(contatoVazio());renderContatos();changed();const ix=S.contatos.length-1;setTimeout(()=>{const el=$("ct_nome_"+ix);if(el)el.focus()},30)};
 $("btnAddDep").onclick=()=>{const n=$("addDep").value.trim();if(!n)return;S.deps.push({nome:n,on:true,resp:""});$("addDep").value="";renderDeps();changed()};
@@ -1541,7 +1608,7 @@ $("btnApresentar").onclick=async()=>{const el=$("painelBody");try{if(el.requestF
 (async function caps(){
   const c=window.claude;
   if(!c||!c.use){
-    MODO="api"; $("btnIE").hidden=false;
+    MODO="api"; $("tab-cfg").hidden=false;
     $("loginForm").addEventListener("submit",async ev=>{ev.preventDefault();
       CRED={nome:$("lg_nome").value.trim(),senha:$("lg_senha").value};
       try{await api("listar");lsSet("memo-cred",JSON.stringify(CRED));$("login").hidden=true;document.body.classList.remove("locked");$("lg_senha").value="";await carregarAPI();toast("Bem-vinda(o), "+CRED.nome+".")}

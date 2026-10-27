@@ -122,23 +122,68 @@ if ($acao === 'cnpj') {
 
 // ---------- inscrição estadual (SEFAZ, webservice CadConsultaCadastro4 com certificado A1) ----------
 // Certificado: variável CERT_PFX_BASE64 (conteúdo do .pfx em base64) ou arquivo DADOS_DIR/certificado.pfx; senha em CERT_SENHA.
-function certPem(&$erro) {
-    $pfx = null;
-    $b64 = getenv('CERT_PFX_BASE64');
-    if ($b64) $pfx = base64_decode(preg_replace('/\s+/', '', $b64), true);
-    $base = rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/');
-    if (!$pfx && is_file($base . '/certificado.pfx')) $pfx = file_get_contents($base . '/certificado.pfx');
-    if (!$pfx) { $erro = 'Certificado não configurado no servidor (CERT_PFX_BASE64 e CERT_SENHA).'; return null; }
-    $pem = sys_get_temp_dir() . '/memo-cert-' . substr(hash('sha256', $pfx), 0, 16) . '.pem';
+// Certificados importados pelo sistema ficam em DADOS_DIR/cert/<id>.pfx + <id>.json (vários; um é o padrão).
+// A senha de cada um fica cifrada com uma chave derivada de SENHA_ACESSO (que não fica no volume de dados).
+// Alternativa: CERT_PFX_BASE64 + CERT_SENHA no ambiente (aparece como certificado "ambiente").
+function certDir() { return rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/') . '/cert'; }
+function chaveCifra() { return hash('sha256', 'memorandos-cert|' . SENHA_ACESSO, true); }
+function cifra($txt) { $iv = random_bytes(16); return base64_encode($iv . openssl_encrypt($txt, 'aes-256-cbc', chaveCifra(), OPENSSL_RAW_DATA, $iv)); }
+function decifra($b64) { $r = base64_decode((string)$b64, true); if (!$r || strlen($r) < 17) return null; $o = openssl_decrypt(substr($r, 16), 'aes-256-cbc', chaveCifra(), OPENSSL_RAW_DATA, substr($r, 0, 16)); return $o === false ? null : $o; }
+function infoCert($pemCert) {
+    $x = openssl_x509_parse($pemCert);
+    $cn = $x['subject']['CN'] ?? '';
+    $doc = ''; if (preg_match('/:(\d{11}|\d{14})\s*$/', $cn, $m)) $doc = $m[1];
+    $nome = trim(preg_replace('/:\d+\s*$/', '', $cn));
+    return ['titular' => $nome ?: $cn, 'documento' => $doc, 'tipo' => strlen($doc) === 14 ? 'e-CNPJ' : (strlen($doc) === 11 ? 'e-CPF' : 'Certificado A1'),
+            'validade' => isset($x['validTo_time_t']) ? date('Y-m-d', $x['validTo_time_t']) : ''];
+}
+function certIdValido($id) { return is_string($id) && preg_match('/^[a-f0-9]{16}$/', $id); }
+function certLista() {
+    $d = certDir(); $out = [];
+    $padrao = is_file("$d/padrao.txt") ? trim(file_get_contents("$d/padrao.txt")) : '';
+    foreach (glob("$d/*.json") ?: [] as $f) {
+        $id = basename($f, '.json'); if (!certIdValido($id) || !is_file("$d/$id.pfx")) continue;
+        $m = json_decode(file_get_contents($f), true) ?: []; unset($m['senha']);
+        $out[] = ['id' => $id] + $m;
+    }
+    if (getenv('CERT_PFX_BASE64')) {
+        $c = [];
+        if (openssl_pkcs12_read(base64_decode(preg_replace('/\s+/', '', getenv('CERT_PFX_BASE64')), true), $c, (string)getenv('CERT_SENHA')))
+            $out[] = ['id' => 'ambiente', 'origem' => 'ambiente'] + infoCert($c['cert']);
+    }
+    usort($out, function ($a, $b) { return strcmp($a['titular'] ?? '', $b['titular'] ?? ''); });
+    if (!$padrao || !array_filter($out, function ($c) use ($padrao) { return $c['id'] === $padrao; })) $padrao = $out[0]['id'] ?? '';
+    foreach ($out as &$c) $c['padrao'] = $c['id'] === $padrao;
+    return $out;
+}
+function certFonte($id, &$erro) {
+    $d = certDir();
+    if (!$id) { foreach (certLista() as $c) if ($c['padrao']) $id = $c['id']; }
+    if (!$id) { $erro = 'Nenhum certificado digital importado. Importe em Configurações.'; return null; }
+    if ($id === 'ambiente') {
+        $b64 = getenv('CERT_PFX_BASE64'); if (!$b64) { $erro = 'Certificado do ambiente não configurado.'; return null; }
+        return [base64_decode(preg_replace('/\s+/', '', $b64), true), (string)getenv('CERT_SENHA')];
+    }
+    if (!certIdValido($id) || !is_file("$d/$id.pfx")) { $erro = 'Certificado escolhido não foi encontrado.'; return null; }
+    $meta = json_decode(file_get_contents("$d/$id.json"), true) ?: [];
+    $senha = decifra($meta['senha'] ?? '');
+    if ($senha === null) { $erro = 'Não foi possível ler a senha desse certificado (a senha de acesso do sistema mudou?). Importe-o de novo.'; return null; }
+    return [file_get_contents("$d/$id.pfx"), $senha];
+}
+function certPem($id, &$erro) {
+    $f = certFonte($id, $erro); if (!$f) return null;
+    [$pfx, $senha] = $f;
+    $pem = sys_get_temp_dir() . '/memo-cert-' . substr(hash('sha256', $pfx . '|' . $senha), 0, 16) . '.pem';
     if (is_file($pem)) return $pem;
     $c = [];
-    if (!openssl_pkcs12_read($pfx, $c, (string)getenv('CERT_SENHA'))) {
-        $erro = 'Não foi possível abrir o certificado: confira a senha (CERT_SENHA) e o arquivo.'; return null;
-    }
+    if (!openssl_pkcs12_read($pfx, $c, $senha)) { $erro = 'Não foi possível abrir o certificado: confira a senha e o arquivo.'; return null; }
     $conteudo = $c['cert'] . "\n" . $c['pkey'] . "\n" . implode("\n", $c['extracerts'] ?? []);
     $old = umask(0077); file_put_contents($pem, $conteudo); umask($old); @chmod($pem, 0600);
     return $pem;
 }
+function limparPems() { foreach (glob(sys_get_temp_dir() . '/memo-cert-*.pem') ?: [] as $f) @unlink($f); }
+if ($acao === 'certlistar') sai(200, ['certificados' => certLista()]);
+
 function soapCadastro($url, $xml, $pem, $verificar) {
     $env = '<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/CadConsultaCadastro4">' . $xml . '</nfeDadosMsg></soap12:Body></soap12:Envelope>';
     $ch = curl_init($url);
@@ -174,7 +219,7 @@ if ($acao === 'ie') {
     if (!in_array($uf, $svrs, true)) sai(400, ['erro' => "Consulta de IE automática ainda não configurada para $uf. Preencha a IE manualmente."]);
     if (!function_exists('curl_init')) sai(500, ['erro' => 'O servidor não tem cURL.']);
     $erro = '';
-    $pem = certPem($erro);
+    $pem = certPem((string)($_GET['cert'] ?? ''), $erro);
     if (!$pem) sai(500, ['erro' => $erro]);
     $xml = '<ConsCad xmlns="http://www.portalfiscal.inf.br/nfe" versao="2.00"><infCons><xServ>CONS-CAD</xServ><UF>' . $uf . '</UF><CNPJ>' . $c . '</CNPJ></infCons></ConsCad>';
     $url = 'https://cad.svrs.rs.gov.br/ws/cadconsultacadastro/cadconsultacadastro4.asmx';
@@ -193,6 +238,45 @@ if ($acao === 'ie') {
 // ---------- gravações (com trava para a numeração) ----------
 $lock = fopen($base . '/.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX)) sai(500, ['erro' => 'Não foi possível travar o arquivo de dados.']);
+
+if ($acao === 'certenviar') {
+    $pfx = base64_decode((string)($in['pfx'] ?? ''), true);
+    $senha = (string)($in['senha'] ?? '');
+    if (!$pfx || strlen($pfx) > 200000) sai(400, ['erro' => 'Arquivo de certificado inválido. Envie o .pfx ou .p12.']);
+    $c = [];
+    if (!openssl_pkcs12_read($pfx, $c, $senha)) sai(400, ['erro' => 'Não foi possível abrir o certificado com essa senha. Confira a senha e o arquivo (.pfx ou .p12).']);
+    $info = infoCert($c['cert']);
+    if ($info['validade'] && $info['validade'] < date('Y-m-d')) sai(400, ['erro' => 'Certificado vencido em ' . implode('/', array_reverse(explode('-', $info['validade']))) . '.']);
+    $d = certDir();
+    if (!is_dir($d)) { $old = umask(0077); mkdir($d, 0700, true); umask($old); }
+    $id = substr(hash('sha256', $c['cert']), 0, 16); // o mesmo certificado importado de novo substitui o anterior
+    $apelido = mb_substr(trim((string)($in['apelido'] ?? '')), 0, 60);
+    $old = umask(0077);
+    $ok = file_put_contents("$d/$id.pfx", $pfx) !== false
+       && file_put_contents("$d/$id.json", json_encode($info + ['apelido' => $apelido, 'senha' => cifra($senha), 'enviadoPor' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80), 'enviadoEm' => date('c')], JSON_UNESCAPED_UNICODE)) !== false;
+    if ($ok && (!empty($in['padrao']) || !is_file("$d/padrao.txt"))) file_put_contents("$d/padrao.txt", $id);
+    umask($old);
+    if (!$ok) sai(500, ['erro' => 'Não foi possível gravar o certificado no servidor.']);
+    limparPems();
+    sai(200, ['id' => $id, 'certificados' => certLista()]);
+}
+
+if ($acao === 'certpadrao') {
+    $id = (string)($in['id'] ?? '');
+    if ($id !== 'ambiente' && !certIdValido($id)) sai(400, ['erro' => 'Certificado inválido.']);
+    $d = certDir(); if (!is_dir($d)) mkdir($d, 0700, true);
+    file_put_contents("$d/padrao.txt", $id);
+    sai(200, ['certificados' => certLista()]);
+}
+
+if ($acao === 'certremover') {
+    $id = (string)($in['id'] ?? '');
+    if (!certIdValido($id)) sai(400, ['erro' => 'Só é possível remover certificados importados pelo sistema.']);
+    $d = certDir();
+    @unlink("$d/$id.pfx"); @unlink("$d/$id.json"); limparPems();
+    if (is_file("$d/padrao.txt") && trim(file_get_contents("$d/padrao.txt")) === $id) @unlink("$d/padrao.txt");
+    sai(200, ['certificados' => certLista()]);
+}
 
 if ($acao === 'salvar') {
     $memo = $in['memo'] ?? null;

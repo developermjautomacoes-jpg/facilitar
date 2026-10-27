@@ -16,9 +16,9 @@ Formulário de memorando para clientes novos: consulta de CNPJ, regime tributár
 6. Clique em **Deploy**. Ative o **Auto Deploy** para publicar a cada push.
 
 ### Consulta da inscrição estadual (SEFAZ)
-A IE é consultada no webservice oficial de cadastro (CadConsultaCadastro4, SVRS) com um certificado A1. Em **Environment** do Easypanel:
-- `CERT_PFX_BASE64` = conteúdo do arquivo `.pfx` em base64 (no Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\caminho\certificado.pfx")) | Set-Clipboard`)
-- `CERT_SENHA` = senha do certificado
+A IE é consultada no webservice oficial de cadastro (CadConsultaCadastro4, SVRS) com um certificado A1.
+Importe os certificados na aba **Configurações** do sistema (arquivo .pfx/.p12 + senha). Dá para ter vários: escolha o padrão e, em cada consulta, qual usar.
+Os arquivos ficam em `/data/cert` (volume) e as senhas ficam cifradas com uma chave derivada de `SENHA_ACESSO` — se essa senha mudar, importe os certificados de novo.
 
 Se a SEFAZ responder "Rejeição 257 – solicitante não habilitado", use um e-CNPJ de empresa habilitada como emissora de NF-e no ES.
 
