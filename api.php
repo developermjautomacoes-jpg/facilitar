@@ -70,6 +70,18 @@ if ($acao === 'listar') {
     sai(200, ['memorandos' => $out]);
 }
 
+function buscaJson($u) {
+    if (function_exists('curl_init')) {
+        $ch = curl_init($u);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 12, CURLOPT_CONNECTTIMEOUT => 6,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'User-Agent: Memorandos-Facilitar/1.0']]);
+        $b = curl_exec($ch); curl_close($ch);
+    } else {
+        $b = @file_get_contents($u, false, stream_context_create(['http' => ['timeout' => 12, 'ignore_errors' => true]]));
+    }
+    return $b ? json_decode($b, true) : null;
+}
+
 // ---------- consulta de CNPJ ----------
 if ($acao === 'cnpj') {
     $c = preg_replace('/\D/', '', $_GET['cnpj'] ?? '');
@@ -92,6 +104,14 @@ if ($acao === 'cnpj') {
         $j = json_decode($body, true);
         if (!is_array($j)) { $ultimo = 'Resposta inválida da consulta.'; continue; }
         if ($code === 200 && (isset($j['razao_social']) || (isset($j['nome']) && ($j['status'] ?? '') !== 'ERROR'))) {
+            // BrasilAPI às vezes não traz a opção pelo Simples: completa com a ReceitaWS
+            if (isset($j['razao_social']) && !isset($j['opcao_pelo_simples'])) {
+                $rw = buscaJson("https://receitaws.com.br/v1/cnpj/$c");
+                if (is_array($rw) && ($rw['status'] ?? '') !== 'ERROR') {
+                    $j['_rws_simples'] = $rw['simples'] ?? null;
+                    $j['_rws_simei'] = $rw['simei'] ?? null;
+                }
+            }
             echo json_encode($j, JSON_UNESCAPED_UNICODE); exit;
         }
         $ultimo = $j['message'] ?? ($code === 404 ? 'CNPJ não encontrado.' : 'Consulta não retornou dados.');
@@ -110,6 +130,9 @@ if ($acao === 'salvar') {
     $id  = $in['id'] ?? null;
     $num = $in['numero'] ?? null;
     $agora = date('c');
+    $usuario = mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80);
+    $alts = [];
+    foreach ((array)($in['alteracoes'] ?? []) as $a) { if (is_string($a) && count($alts) < 60) $alts[] = mb_substr($a, 0, 80); }
 
     if ($id) {
         if (!idValido($id) || !file_exists(arq($memDir, $id))) sai(404, ['erro' => 'Memorando não encontrado no arquivo.']);
@@ -119,6 +142,9 @@ if ($acao === 'salvar') {
         $memo['criadoEm'] = $atual['criadoEm'] ?? $agora;
         $memo['criadoPorNome'] = $atual['criadoPorNome'] ?? '';
         $memo['status'] = $memo['status'] ?? ($atual['status'] ?? 'ativo');
+        $hist = is_array($atual['historico'] ?? null) ? $atual['historico'] : [];
+        if (!$hist && !empty($atual['criadoEm'])) $hist[] = ['acao' => 'Criou o memorando', 'por' => $atual['criadoPorNome'] ?? '', 'em' => $atual['criadoEm']];
+        $antigoSeq = (int)($atual['seq'] ?? 0); $antigoAno = (int)($atual['ano'] ?? 0);
     } else {
         if (is_array($num)) { $seq = (int)$num['seq']; $ano = (int)$num['ano']; }
         else {
@@ -130,13 +156,24 @@ if ($acao === 'salvar') {
             $seq = $max + 1;
         }
         $memo['criadoEm'] = $agora;
+        $memo['criadoPorNome'] = $usuario;
         $memo['status'] = 'ativo';
+        $hist = [['acao' => 'Criou o memorando', 'por' => $usuario, 'em' => $agora]];
     }
     if ($seq < 1 || $seq > 9999 || $ano < 2000 || $ano > 2100) sai(400, ['erro' => 'Número inválido.']);
     $novoId = idDe($seq, $ano);
     if ($novoId !== $id && file_exists(arq($memDir, $novoId))) {
         sai(409, ['erro' => 'Já existe o memorando Nº ' . numTxt($seq, $ano) . '. Escolha outro número.']);
     }
+    if ($id) {
+        if ($antigoSeq !== $seq || $antigoAno !== $ano) {
+            $hist[] = ['acao' => 'Renumerou de ' . numTxt($antigoSeq, $antigoAno) . ' para ' . numTxt($seq, $ano), 'campos' => $alts, 'por' => $usuario, 'em' => $agora];
+        } elseif ($alts) {
+            $hist[] = ['acao' => 'Alterou', 'campos' => $alts, 'por' => $usuario, 'em' => $agora];
+        }
+    }
+    $memo['historico'] = array_slice($hist, -300);
+    $memo['atualizadoPorNome'] = $usuario;
     unset($memo['_id'], $memo['busca']);
     $memo['seq'] = $seq; $memo['ano'] = $ano; $memo['m_numero'] = numTxt($seq, $ano);
     $memo['atualizadoEm'] = $agora;
@@ -153,6 +190,9 @@ if ($acao === 'status') {
     $m = ler($f);
     if (!$m) sai(404, ['erro' => 'Memorando não encontrado.']);
     $m['status'] = $st; $m['atualizadoEm'] = date('c');
+    $hist = is_array($m['historico'] ?? null) ? $m['historico'] : [];
+    $hist[] = ['acao' => $st === 'cancelado' ? 'Cancelou o memorando' : 'Reativou o memorando', 'por' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80), 'em' => $m['atualizadoEm']];
+    $m['historico'] = array_slice($hist, -300);
     if (!grava($f, $m)) sai(500, ['erro' => 'Não foi possível gravar.']);
     sai(200, ['ok' => true]);
 }
