@@ -145,6 +145,8 @@ if ($acao === 'salvar') {
         $hist = is_array($atual['historico'] ?? null) ? $atual['historico'] : [];
         if (!$hist && !empty($atual['criadoEm'])) $hist[] = ['acao' => 'Criou o memorando', 'por' => $atual['criadoPorNome'] ?? '', 'em' => $atual['criadoEm']];
         $antigoSeq = (int)($atual['seq'] ?? 0); $antigoAno = (int)($atual['ano'] ?? 0);
+        // situação do cliente é alterada só pela ação "cliente"
+        foreach (['situacaoCliente', 'dataSaida', 'motivoSaida', 'obsSaida'] as $k) $memo[$k] = $atual[$k] ?? '';
     } else {
         if (is_array($num)) { $seq = (int)$num['seq']; $ano = (int)$num['ano']; }
         else {
@@ -193,6 +195,33 @@ if ($acao === 'status') {
     $hist = is_array($m['historico'] ?? null) ? $m['historico'] : [];
     $hist[] = ['acao' => $st === 'cancelado' ? 'Cancelou o memorando' : 'Reativou o memorando', 'por' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80), 'em' => $m['atualizadoEm']];
     $m['historico'] = array_slice($hist, -300);
+    if (!grava($f, $m)) sai(500, ['erro' => 'Não foi possível gravar.']);
+    sai(200, ['ok' => true]);
+}
+
+if ($acao === 'cliente') {
+    $id = $in['id'] ?? ''; $sit = $in['situacaoCliente'] ?? '';
+    if (!idValido($id) || !in_array($sit, ['ativa', 'inativa'], true)) sai(400, ['erro' => 'Pedido inválido.']);
+    $f = arq($memDir, $id);
+    $m = ler($f);
+    if (!$m) sai(404, ['erro' => 'Memorando não encontrado.']);
+    $usuario = mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80);
+    $agora = date('c');
+    $hist = is_array($m['historico'] ?? null) ? $m['historico'] : [];
+    if ($sit === 'inativa') {
+        $data = (string)($in['dataSaida'] ?? '');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) sai(400, ['erro' => 'Data de saída inválida.']);
+        $m['situacaoCliente'] = 'inativa';
+        $m['dataSaida'] = $data;
+        $m['motivoSaida'] = mb_substr((string)($in['motivoSaida'] ?? ''), 0, 120);
+        $m['obsSaida'] = mb_substr((string)($in['obsSaida'] ?? ''), 0, 500);
+        $hist[] = ['acao' => 'Registrou a saída do cliente (' . implode('/', array_reverse(explode('-', $data))) . ($m['motivoSaida'] ? ' · ' . $m['motivoSaida'] : '') . ')', 'por' => $usuario, 'em' => $agora];
+    } else {
+        $m['situacaoCliente'] = 'ativa'; $m['dataSaida'] = ''; $m['motivoSaida'] = ''; $m['obsSaida'] = '';
+        $hist[] = ['acao' => 'Reativou o cliente', 'por' => $usuario, 'em' => $agora];
+    }
+    $m['historico'] = array_slice($hist, -300);
+    $m['atualizadoEm'] = $agora;
     if (!grava($f, $m)) sai(500, ['erro' => 'Não foi possível gravar.']);
     sai(200, ['ok' => true]);
 }
