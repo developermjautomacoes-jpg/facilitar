@@ -986,7 +986,7 @@ async function aplicarAtualizacao(salvarJa){
     else $(x.k).value=x.valor;
   });
   renderAll();changed();$("atuBox").hidden=true;
-  if(salvarJa){ await salvar(); } else toast(marc.length+" item(ns) aplicado(s). Confira e clique em Salvar memorando.");
+  if(salvarJa){ S.acaoAlterou="Atualizou o cadastro pela Receita"; try{ await salvar(); } finally { S.acaoAlterou=""; } } else toast(marc.length+" item(ns) aplicado(s). Confira e clique em Salvar memorando.");
   if(MODO==="api"&&CERTS.length) buscarIE(false);
 }
 
@@ -1351,7 +1351,7 @@ async function salvar(){
       const camp=alteracoes(S.original||anterior,d);
       const hist=historicoDe(anterior).slice(-300);
       if(novo) hist.push({acao:"Renumerou de "+numeroTxt(S.seq,S.ano)+" para "+numeroTxt(seq,ano),campos:camp,por:quem(),porId:MY_ID,em:agora});
-      else if(camp.length) hist.push({acao:"Alterou",campos:camp,por:quem(),porId:MY_ID,em:agora});
+      else if(camp.length) hist.push({acao:S.acaoAlterou||"Alterou",campos:camp,por:quem(),porId:MY_ID,em:agora});
       const body={...d,seq,ano,m_numero:numeroTxt(seq,ano),status:S.status,criadoEm:S.criadoEm,criadoPor:S.criadoPor,criadoPorNome:anterior.criadoPorNome||"",historico:hist,atualizadoEm:agora,atualizadoPor:MY_ID,atualizadoPorNome:quem(),busca:"",
         situacaoCliente:anterior.situacaoCliente||"ativa",dataSaida:anterior.dataSaida||"",motivoSaida:anterior.motivoSaida||"",obsSaida:anterior.obsSaida||""};
       body.busca=textoBusca(body);
@@ -1419,7 +1419,7 @@ async function salvarAPI(){
     if(!S.docId) memo.criadoPorNome=(CRED&&CRED.nome)||"";
     delete memo._id;
     const antigo=S.docId?numeroTxt(S.seq,S.ano):null;
-    const j=await api("salvar",{id:S.docId,numero:pm?{seq:pm.seq,ano:pm.ano}:null,anoAuto:+((d.m_data||hojeISO()).slice(0,4)),usuario:quem(),alteracoes:alteracoes(S.original||(S.docId&&ARQ.find(x=>x._id===S.docId)),d),memo});
+    const j=await api("salvar",{id:S.docId,numero:pm?{seq:pm.seq,ano:pm.ano}:null,anoAuto:+((d.m_data||hojeISO()).slice(0,4)),usuario:quem(),acaoAlterou:S.acaoAlterou||"",alteracoes:alteracoes(S.original||(S.docId&&ARQ.find(x=>x._id===S.docId)),d),memo});
     const m=j.memo;
     S.docId=m._id;S.seq=m.seq;S.ano=m.ano;S.status=m.status||"ativo";S.criadoEm=m.criadoEm;
     $("m_numero").value=numeroTxt(m.seq,m.ano);
