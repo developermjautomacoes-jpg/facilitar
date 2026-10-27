@@ -1072,67 +1072,148 @@ function dadosMemo(d){
   Object.assign(S,bak);
   return {ano,seq,reg,atv,sv,anx,fr};
 }
-function blocosMemo(d){
-  const m=dadosMemo(d), B=[];
-  B.push(el("m-head",'<div class="m-kicker">Memorando</div><div class="m-num">Nº '+esc(numeroTxt(m.seq,m.ano))+(d.status==="cancelado"?' <span style="font-size:14px;color:#A63A32">CANCELADO</span>':'')+'</div>'+
-    '<div class="m-date">Em '+esc(extenso(d.m_data)||"")+'</div><div class="m-rule"></div>'+
-    '<p class="m-to">Aos Senhores(as) Encarregados(as) dos setores de <b>'+esc(listaSetores(d.deps||[]))+'</b>.</p>'+
-    '<p class="m-subj">Assunto: <b>'+v(d.m_assunto)+'</b></p>'));
-  B.push(sec("Dados da empresa"));
-  B.push(kv("Nome",d.e_razao)); B.push(kv("Nome fantasia",d.e_fantasia));
-  B.push(kv2(["CNPJ",d.e_cnpj],["Abertura",br(d.e_abertura)]));
-  B.push(kv2(["Cliente desde",br(d.e_desde)],["Situação",d.e_situacao]));
-  B.push(kv2(["NIRE",d.e_nire],["Capital social",d.e_capital]));
-  B.push(kv2(["Inscrição estadual",d.e_ie],["Inscrição municipal",d.e_im]));
-  if(d.e_natureza)B.push(kv("Natureza jurídica",d.e_natureza));
-  B.push(kv("Endereço",d.e_endereco));
-  B.push(kv2(["Telefone da empresa",d.e_tel],["E-mail da empresa",d.e_email]));
+/* Conteúdo do memorando em itens neutros: a prévia (HTML) e o PDF (texto) são desenhados a partir dele */
+const TAB_COLS={so:[.5,.36,.14],ct:[.29,.17,.31,.23],at:[.12,.6,.1,.18],sv:[.1,.75,.15],dp:[.32,.68]};
+function modeloMemo(d){
+  const m=dadosMemo(d), I=[], val=x=>{x=(x==null?"":String(x)).trim();return x||"—"};
+  I.push({t:"head",num:"Nº "+numeroTxt(m.seq,m.ano),cancel:d.status==="cancelado",data:"Em "+(extenso(d.m_data)||""),setores:listaSetores(d.deps||[]),assunto:val(d.m_assunto)});
+  I.push({t:"sec",title:"Dados da empresa"});
+  I.push({t:"kv",l:"Nome",v:val(d.e_razao)});I.push({t:"kv",l:"Nome fantasia",v:val(d.e_fantasia)});
+  I.push({t:"kv2",a:["CNPJ",val(d.e_cnpj)],b:["Abertura",val(br(d.e_abertura))]});
+  I.push({t:"kv2",a:["Cliente desde",val(br(d.e_desde))],b:["Situação",val(d.e_situacao)]});
+  I.push({t:"kv2",a:["NIRE",val(d.e_nire)],b:["Capital social",val(d.e_capital)]});
+  I.push({t:"kv2",a:["Inscrição estadual",val(d.e_ie)],b:["Inscrição municipal",val(d.e_im)]});
+  if(d.e_natureza)I.push({t:"kv",l:"Natureza jurídica",v:val(d.e_natureza)});
+  I.push({t:"kv",l:"Endereço",v:val(d.e_endereco)});
+  I.push({t:"kv2",a:["Telefone da empresa",val(d.e_tel)],b:["E-mail da empresa",val(d.e_email)]});
   const socs=(d.socios||[]).filter(x=>(x.nome||"").trim());
-  if(socs.length){
-    B.push(sec("Quadro societário",socs.length+" sócio"+(socs.length>1?"s":"")));
-    const h=el("trow so h","<div>Nome</div><div>Qualificação</div><div>Entrada</div>");B.push(h);
-    socs.forEach(x=>{const r=el("trow so","<div><b>"+v(x.nome)+"</b></div><div>"+v(x.qualificacao)+"</div><div class='c'>"+v(br(x.entrada))+"</div>");r._head=h;B.push(r)});
-  }
+  if(socs.length){I.push({t:"sec",title:"Quadro societário",extra:socs.length+" sócio"+(socs.length>1?"s":"")});
+    I.push({t:"tab",k:"so",head:["Nome","Qualificação","Entrada"],bold:[0],num:[2],rows:socs.map(x=>[val(x.nome),val(x.qualificacao),val(br(x.entrada))])})}
   const cts=contatosDe(d).filter(c=>(c.nome||c.telefone||c.email||"").trim());
-  if(cts.length){
-    B.push(sec("Contatos da empresa",cts.length+" contato"+(cts.length>1?"s":"")));
-    const h=el("trow ct h","<div>Nome / cargo</div><div>Telefone</div><div>E-mail</div><div>Setores</div>");B.push(h);
-    cts.forEach(c=>{const r=el("trow ct","<div><b>"+v(c.nome)+"</b>"+(c.cargo?"<div style='color:#4d5b6b'>"+esc(c.cargo)+"</div>":"")+"</div><div class='c'>"+v(c.telefone)+"</div><div style='overflow-wrap:anywhere'>"+v(c.email)+"</div><div>"+v((c.setores||[]).join(", "))+"</div>");r._head=h;B.push(r)});
-  }
-  B.push(sec("Tributação"));
-  B.push(kv("Opção tributária",(m.reg||"").toUpperCase()+(m.reg==="Simples Nacional"&&d.t_modalidade?" – "+d.t_modalidade.toUpperCase():"")));
-  if(isSimples(m.reg)){ B.push(kv("Situação no Simples",d.t_simples)); if(/simples/i.test(m.reg)) B.push(kv("Anexos do Simples",m.anx.length?m.anx.map(a=>"Anexo "+a).join(", ")+(m.fr?" · atividade sujeita ao fator r":""):"")); }
+  if(cts.length){I.push({t:"sec",title:"Contatos da empresa",extra:cts.length+" contato"+(cts.length>1?"s":"")});
+    I.push({t:"tab",k:"ct",head:["Nome / cargo","Telefone","E-mail","Setores"],bold:[0],num:[1],rows:cts.map(c=>[{txt:val(c.nome),sub:c.cargo||""},val(c.telefone),val(c.email),val((c.setores||[]).join(", "))])})}
+  I.push({t:"sec",title:"Tributação"});
+  I.push({t:"kv",l:"Opção tributária",v:val((m.reg||"").toUpperCase()+(m.reg==="Simples Nacional"&&d.t_modalidade?" – "+d.t_modalidade.toUpperCase():""))});
+  if(isSimples(m.reg)){I.push({t:"kv",l:"Situação no Simples",v:val(d.t_simples)}); if(/simples/i.test(m.reg)) I.push({t:"kv",l:"Anexos do Simples",v:val(m.anx.length?m.anx.map(a=>"Anexo "+a).join(", ")+(m.fr?" · atividade sujeita ao fator r":""):"")})}
   const princ=m.atv.find(a=>a.tipo==="Principal");
-  B.push(kv("CNAE principal",princ?fmtCnae(princ.cod)+" – "+(princ.desc||infoCnae(princ.cod).desc):""));
-  if(m.atv.length){
-    B.push(sec("Atividades que podem ser exercidas",m.atv.length+" CNAE"+(m.atv.length>1?"s":"")));
-    const h=el("trow at h","<div>CNAE</div><div>Atividade</div><div>Anexo</div><div>Cód. serviço</div>"); B.push(h);
-    m.atv.forEach(a=>{const i=infoCnae(a.cod);const r=el("trow at",'<div class="c">'+esc(fmtCnae(a.cod))+'</div><div>'+esc(a.desc||i.desc)+(a.tipo==="Principal"?'<span class="m-tag">PRINCIPAL</span>':'')+'</div><div>'+esc(i.anexos.join("/")||"Verificar")+'</div><div class="c">'+esc(i.itens.join(", ")||"—")+'</div>');r._head=h;B.push(r)});
-  }
-  if(m.sv.length){
-    B.push(sec("Códigos de serviço (LC 116)"));
-    const h=el("trow sv h","<div>Código</div><div>Descrição</div><div>Anexo</div>"); B.push(h);
-    m.sv.forEach(s=>{const r=el("trow sv",'<div class="c">'+esc(s.item)+'</div><div>'+esc(s.desc||"—")+'</div><div>'+esc(s.anexo||"—")+'</div>');r._head=h;B.push(r)});
-  }
+  I.push({t:"kv",l:"CNAE principal",v:val(princ?fmtCnae(princ.cod)+" – "+(princ.desc||infoCnae(princ.cod).desc):"")});
+  if(m.atv.length){I.push({t:"sec",title:"Atividades que podem ser exercidas",extra:m.atv.length+" CNAE"+(m.atv.length>1?"s":"")});
+    I.push({t:"tab",k:"at",head:["CNAE","Atividade","Anexo","Cód. serviço"],num:[0,3],rows:m.atv.map(a=>{const i=infoCnae(a.cod);return [fmtCnae(a.cod),{txt:a.desc||i.desc||"—",tag:a.tipo==="Principal"?"PRINCIPAL":""},i.anexos.join("/")||"Verificar",i.itens.join(", ")||"—"]})})}
+  if(m.sv.length){I.push({t:"sec",title:"Códigos de serviço (LC 116)"});
+    I.push({t:"tab",k:"sv",head:["Código","Descrição","Anexo"],num:[0],rows:m.sv.map(x=>[x.item,x.desc||"—",x.anexo||"—"])})}
   const deps=(d.deps||[]).filter(x=>x.on);
-  B.push(sec("Departamentos e responsáveis"));
-  if(deps.length){const h=el("trow dp h","<div>Departamento</div><div>Responsável pela empresa</div>");B.push(h);
-    deps.forEach(x=>{const r=el("trow dp","<div><b>"+esc(x.nome)+"</b></div><div>"+v(x.resp)+"</div>");r._head=h;B.push(r)});}
-  else B.push(el("m-obs","<i>Nenhum setor marcado.</i>"));
-  B.push(sec("Rotinas, acessos e obrigações"));
-  B.push(kv2(["Pró-labore",d.r_prolabore],["Folha de pagamento",d.r_folha]));
-  B.push(kv2(["Certificado digital",d.r_cert],["Domínio",d.r_dominio]));
-  B.push(kv2(["Sintegra",d.r_sintegra],["SPED Contábil",d.r_spedc]));
-  B.push(kv2(["SPED Fiscal",d.r_spedf],["Fará a emissão",(d.emissao||[]).join(", ")]));
-  B.push(kv("Ferramentas configuradas",(d.ferramentas||[]).join(", ")));
-  B.push(kv2(["Login NFS-e",d.r_loginNfse],["Senha NFS-e",d.r_senhaNfse]));
-  B.push(kv2(["Cód. acesso Simples",d.r_codSimples],["Senha SEFAZ-ES AGV",d.r_sefaz]));
-  B.push(kv2(["CPF ADM",d.r_cpfAdm],["PIS",d.r_pis]));
-  B.push(kv("Documentos digitalizados em",d.r_docs));
-  const obs=String(d.obs||"").split(/\n\s*\n|\n/).map(s=>s.trim()).filter(Boolean);
-  if(obs.length){B.push(sec("Observações"));obs.forEach(p=>B.push(el("m-obs",esc(p))))}
+  I.push({t:"sec",title:"Departamentos e responsáveis"});
+  if(deps.length) I.push({t:"tab",k:"dp",head:["Departamento","Responsável pela empresa"],bold:[0],rows:deps.map(x=>[x.nome,val(x.resp)])});
+  else I.push({t:"p",text:"Nenhum setor marcado.",italic:true});
+  I.push({t:"sec",title:"Rotinas, acessos e obrigações"});
+  I.push({t:"kv2",a:["Pró-labore",val(d.r_prolabore)],b:["Folha de pagamento",val(d.r_folha)]});
+  I.push({t:"kv2",a:["Certificado digital",val(d.r_cert)],b:["Domínio",val(d.r_dominio)]});
+  I.push({t:"kv2",a:["Sintegra",val(d.r_sintegra)],b:["SPED Contábil",val(d.r_spedc)]});
+  I.push({t:"kv2",a:["SPED Fiscal",val(d.r_spedf)],b:["Fará a emissão",val((d.emissao||[]).join(", "))]});
+  I.push({t:"kv",l:"Ferramentas configuradas",v:val((d.ferramentas||[]).join(", "))});
+  I.push({t:"kv2",a:["Login NFS-e",val(d.r_loginNfse)],b:["Senha NFS-e",val(d.r_senhaNfse)]});
+  I.push({t:"kv2",a:["Cód. acesso Simples",val(d.r_codSimples)],b:["Senha SEFAZ-ES AGV",val(d.r_sefaz)]});
+  I.push({t:"kv2",a:["CPF ADM",val(d.r_cpfAdm)],b:["PIS",val(d.r_pis)]});
+  I.push({t:"kv",l:"Documentos digitalizados em",v:val(d.r_docs)});
+  const obs=String(d.obs||"").split(/\n\s*\n|\n/).map(x=>x.trim()).filter(Boolean);
+  if(obs.length){I.push({t:"sec",title:"Observações"});obs.forEach(x=>I.push({t:"p",text:x}))}
+  return I;
+}
+function blocosMemo(d){
+  const B=[];
+  modeloMemo(d).forEach(it=>{
+    if(it.t==="head") B.push(el("m-head",'<div class="m-kicker">Memorando</div><div class="m-num">'+esc(it.num)+(it.cancel?' <span style="font-size:14px;color:#A63A32">CANCELADO</span>':'')+'</div>'+
+      '<div class="m-date">'+esc(it.data)+'</div><div class="m-rule"></div>'+
+      '<p class="m-to">Aos Senhores(as) Encarregados(as) dos setores de <b>'+esc(it.setores)+'</b>.</p><p class="m-subj">Assunto: <b>'+esc(it.assunto)+'</b></p>'));
+    else if(it.t==="sec") B.push(sec(it.title,it.extra));
+    else if(it.t==="kv") B.push(kv(it.l,it.v));
+    else if(it.t==="kv2") B.push(kv2(it.a,it.b));
+    else if(it.t==="p") B.push(el("m-obs",it.italic?"<i>"+esc(it.text)+"</i>":esc(it.text)));
+    else if(it.t==="tab"){
+      const h=el("trow "+it.k+" h",it.head.map(x=>"<div>"+esc(x)+"</div>").join(""));B.push(h);
+      it.rows.forEach(r=>{const row=el("trow "+it.k,r.map((c,ci)=>{const o=typeof c==="object"?c:{txt:c};const cls=(it.num||[]).includes(ci)?' class="c"':'';
+        let html=esc(o.txt);if((it.bold||[]).includes(ci))html="<b>"+html+"</b>";if(o.sub)html+="<div style='color:#4d5b6b'>"+esc(o.sub)+"</div>";if(o.tag)html+='<span class="m-tag">'+esc(o.tag)+'</span>';
+        return "<div"+cls+(it.k==="ct"&&ci===2?" style='overflow-wrap:anywhere'":"")+">"+html+"</div>"}).join(""));row._head=h;B.push(row)});
+    }
+  });
   return B;
 }
+
+/* ---------- PDF com texto (selecionável e editável), desenhado com jsPDF ---------- */
+function txtPdf(s){return String(s==null?"":s).replace(/[–—]/g,"-").replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,"...").replace(/•/g,"·").replace(/[^\x00-\xFF]/g,"")}
+function memoParaPdf(d,pdf){
+  const layout=d.layout||"1", L=LAYOUT[layout], PX=210/794;
+  const X=L.l*PX, W=(L.r-L.l)*PX, TOP=L.t*PX, BOT=(L.b-28)*PX, SPH=L.sp?TOP+L.sp.h*PX:0, SPW=L.sp?L.sp.w*PX:0;
+  const NAVY=[27,58,92], BLUE=[43,90,132], GOLD=[201,165,75], GOLDTXT=[138,109,43], INK=[20,32,45], LAB=[77,91,107], LINE=[200,210,222], RED=[166,58,50];
+  const PT=0.3528, lh=pt=>pt*PT*1.32;
+  let y=TOP, pag=0, primeira=true;
+  const fundo=()=>pdf.addImage(BG[layout],"JPEG",0,0,210,297,"fundo"+layout,"FAST");
+  const novaPag=()=>{ if(!primeira) pdf.addPage(); primeira=false; pag++; fundo(); y=TOP; };
+  const larg=yy=>(L.sp&&yy<SPH)?W-SPW:W;
+  const font=(st,pt,cor)=>{pdf.setFont("helvetica",st);pdf.setFontSize(pt);pdf.setTextColor(...(cor||INK))};
+  const quebra=(t,w)=>pdf.splitTextToSize(txtPdf(t),Math.max(5,w));
+  const cabe=h=>{ if(y+h>BOT){ novaPag(); return false } return true };
+  const tracejado=(x1,x2,yy)=>{pdf.setDrawColor(...LINE);pdf.setLineWidth(0.15);pdf.setLineDashPattern([0.5,0.6],0);pdf.line(x1,yy,x2,yy);pdf.setLineDashPattern([],0)};
+  // texto com trechos normais e em negrito, quebrando por palavra
+  const rico=(partes,pt,x,w)=>{
+    const tokens=[];partes.forEach(([t,b])=>txtPdf(t).split(/(\s+)/).forEach(tk=>{if(tk)tokens.push([tk,b])}));
+    let linha=[],lw=0;const linhas=[];
+    tokens.forEach(([tk,b])=>{if(!linha.length&&!tk.trim())return;font(b?"bold":"normal",pt);const tw=pdf.getTextWidth(tk);if(lw+tw>w&&linha.length&&tk.trim()){linhas.push(linha);linha=[];lw=0}linha.push([tk,b,tw]);lw+=tw});
+    if(linha.length)linhas.push(linha);
+    linhas.forEach(li=>{cabe(lh(pt));let xx=x;li.forEach(([tk,b,tw])=>{font(b?"bold":"normal",pt);pdf.text(tk,xx,y+pt*PT);xx+=tw});y+=lh(pt)});
+  };
+  novaPag();
+  const itens=modeloMemo(d);
+  itens.forEach((it,ix)=>{
+    if(it.t==="head"){
+      font("bold",8.2,GOLDTXT);pdf.setCharSpace(0.8);pdf.text("MEMORANDO",X,y+8.2*PT);pdf.setCharSpace(0);y+=lh(8.2);
+      font("bold",22.5,NAVY);pdf.text(txtPdf(it.num),X,y+22.5*PT*0.95);
+      if(it.cancel){const nw=pdf.getTextWidth(txtPdf(it.num));font("bold",10.5,RED);pdf.text("CANCELADO",X+nw+3,y+22.5*PT*0.95)}
+      y+=22.5*PT*1.12;
+      font("bold",9.8,BLUE);pdf.text(txtPdf(it.data),X,y+9.8*PT);y+=lh(9.8)+2;
+      pdf.setDrawColor(...GOLD);pdf.setLineWidth(0.8);pdf.line(X,y,X+66,y);y+=3.6;
+      rico([["Aos Senhores(as) Encarregados(as) dos setores de ",false],[it.setores,true],[".",false]],9,X,larg(y));
+      rico([["Assunto: ",false],[it.assunto,true]],9,X,larg(y));y+=1.5;
+    } else if(it.t==="sec"){
+      const prox=itens[ix+1]; cabe(11+(prox?(prox.t==="tab"?17:prox.t!=="sec"?7:0):0));
+      y+=3.2; font("bold",9,NAVY);pdf.setCharSpace(0.35);pdf.text(txtPdf(it.title.toUpperCase()),X,y+9*PT);pdf.setCharSpace(0);
+      if(it.extra){font("bold",8,GOLDTXT);pdf.text(txtPdf(it.extra.toUpperCase()),X+larg(y),y+9*PT,{align:"right"})}
+      y+=lh(9)+0.6; pdf.setDrawColor(...NAVY);pdf.setLineWidth(0.4);pdf.line(X,y,X+larg(y),y);y+=1.4;
+    } else if(it.t==="kv"||it.t==="kv2"){
+      const w=larg(y), pares=it.t==="kv"?[[it.l,it.v,X,w]]:[[it.a[0],it.a[1],X,(w-4.8)/2],[it.b[0],it.b[1],X+(w+4.8)/2,(w-4.8)/2]];
+      const pt=8.6;
+      const blocos=pares.map(([l,v,x,ww])=>{const lw=it.t==="kv"?35:Math.min(33,ww*0.5);font("bold",pt);const rot=quebra(l,lw-2);const linhas=quebra(v,ww-lw-1.5);return {rot,x,ww,lw,linhas}});
+      const h=Math.max(...blocos.map(b=>Math.max(b.linhas.length,b.rot.length)))*lh(pt)+1.4;
+      cabe(h);
+      blocos.forEach(b=>{font("bold",pt,LAB);b.rot.forEach((ln,k)=>pdf.text(ln,b.x,y+0.6+pt*PT+k*lh(pt)));font("bold",pt,INK);b.linhas.forEach((ln,k)=>pdf.text(ln,b.x+b.lw,y+0.6+pt*PT+k*lh(pt)));tracejado(b.x,b.x+b.ww,y+h)});
+      y+=h;
+    } else if(it.t==="p"){
+      font(it.italic?"italic":"normal",8.6,INK);
+      quebra(it.text,larg(y)).forEach(ln=>{cabe(lh(8.6));font(it.italic?"italic":"normal",8.6,INK);pdf.text(ln,X,y+8.6*PT);y+=lh(8.6)});y+=1.2;
+    } else if(it.t==="tab"){
+      const fr=TAB_COLS[it.k], gap=2;
+      const cabec=()=>{const w=larg(y);let xx=X;font("bold",7,LAB);pdf.setCharSpace(0.25);it.head.forEach((hd,ci)=>{pdf.text(txtPdf(hd.toUpperCase()),xx,y+0.5+7*PT);xx+=w*fr[ci]});pdf.setCharSpace(0);y+=lh(7)+1;pdf.setDrawColor(159,176,194);pdf.setLineWidth(0.25);pdf.line(X,y,X+w,y);y+=0.6};
+      cabe(lh(7)+lh(8.6)+3); cabec();
+      it.rows.forEach(r=>{
+        const w=larg(y);
+        const cel=r.map((c,ci)=>{const o=typeof c==="object"?c:{txt:c};const cw=w*fr[ci]-gap;const b=(it.bold||[]).includes(ci);font(b?"bold":"normal",8.2);
+          const linhas=quebra(o.txt+(o.tag?"  ["+o.tag.toLowerCase()+"]":""),cw);font("normal",7.6);const sub=o.sub?quebra(o.sub,cw):[];return {linhas,sub,b,cw}});
+        const h=Math.max(...cel.map(c=>c.linhas.length*lh(8.2)+c.sub.length*lh(7.6)))+1.6;
+        if(y+h>BOT){novaPag();cabec()}
+        let xx=X;
+        cel.forEach((c,ci)=>{let yy=y+0.8+8.2*PT;font(c.b?"bold":"normal",8.2,INK);c.linhas.forEach(ln=>{pdf.text(ln,xx,yy);yy+=lh(8.2)});font("normal",7.6,LAB);c.sub.forEach(ln=>{pdf.text(ln,xx,yy);yy+=lh(7.6)});xx+=w*fr[ci]});
+        y+=h; tracejado(X,X+w,y);
+      });
+    }
+  });
+  // rodapé em todas as páginas
+  const total=pdf.getNumberOfPages();
+  for(let i=1;i<=total;i++){pdf.setPage(i);const fy=(L.b-20)*PX;pdf.setDrawColor(215,222,230);pdf.setLineWidth(0.2);pdf.setLineDashPattern([],0);pdf.line(X,fy,X+W,fy);
+    font("normal",6.2,[106,118,134]);pdf.text(txtPdf(ENDERECO_ESC),X,fy+2.8);pdf.text("Página "+i+" de "+total,X+W,fy+2.8,{align:"right"})}
+  pdf.setProperties({title:"Memorando "+numeroTxt(d.seq||dadosMemo(d).seq,d.ano||dadosMemo(d).ano)+" - "+txtPdf(d.e_razao||""),author:"Facilitar Serviços Contábeis",subject:txtPdf(d.m_assunto||""),creator:"Memorandos Facilitar"});
+  return pdf;
+}
+
 function novaPagina(layout){
   const L=LAYOUT[layout]||LAYOUT["1"];
   const p=document.createElement("div");p.className="page";
@@ -1196,26 +1277,11 @@ async function salvarArquivo(filename,data){
   catch(e){ if(e&&e.code==="declined")toast("Download cancelado."); else if(e&&e.code==="rate_limited")toast("Já há um download aguardando confirmação."); else toast("Não foi possível baixar o arquivo ("+((e&&e.code)||"erro")+")."); return false}
 }
 async function gerarPDF(d){
-  if(!window.html2canvas||!window.jspdf){toast("Bibliotecas de PDF não carregaram. Recarregue a página.");return}
-  const ov=$("overlay"),st=$("overlayStage");ov.hidden=false;$("overlayMsg").textContent="Gerando PDF…";
+  if(!window.jspdf){toast("Biblioteca de PDF não carregou. Recarregue a página.");return}
   try{
-    if(document.fonts&&document.fonts.ready)await document.fonts.ready;
-    const holder=document.createElement("div");holder.style.cssText="position:absolute;left:0;top:0;width:794px";
-    st.innerHTML="";st.appendChild(holder);
-    const tmp=document.createElement("div");tmp.style.cssText="position:absolute;left:0;top:0;width:794px";st.appendChild(tmp);
-    const pages=paginar(d,tmp);
-    const pdf=new window.jspdf.jsPDF({unit:"mm",format:"a4",compress:true});
-    for(let i=0;i<pages.length;i++){
-      $("overlayMsg").textContent="Gerando PDF… página "+(i+1)+" de "+pages.length;
-      holder.innerHTML="";holder.appendChild(pages[i]);
-      const cv=await html2canvas(pages[i],{scale:2,backgroundColor:"#ffffff",useCORS:true,logging:false,scrollX:0,scrollY:0,windowWidth:1200,windowHeight:1300});
-      if(i)pdf.addPage();
-      pdf.addImage(cv.toDataURL("image/jpeg",0.9),"JPEG",0,0,210,297);
-    }
-    st.innerHTML="";ov.hidden=true;
+    const pdf=memoParaPdf(d,new window.jspdf.jsPDF({unit:"mm",format:"a4",compress:true}));
     await salvarArquivo(nomeArquivo(d,"pdf"),pdf.output("blob"));
   }catch(e){console.error(e);toast("Erro ao gerar o PDF.")}
-  finally{st.innerHTML="";ov.hidden=true}
 }
 /* DOCX montado do zero, com o layout como fundo da página */
 function xe(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
