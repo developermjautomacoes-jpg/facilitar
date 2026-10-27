@@ -235,6 +235,11 @@ if ($acao === 'ie') {
     sai(200, $r);
 }
 
+// ---------- colaboradores ----------
+function colabsArq() { return rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/') . '/colaboradores.json'; }
+function colabsLer() { $f = colabsArq(); $c = is_file($f) ? json_decode(file_get_contents($f), true) : []; return is_array($c) ? $c : []; }
+if ($acao === 'colabs') sai(200, ['colaboradores' => colabsLer()]);
+
 // ---------- gravações (com trava para a numeração) ----------
 $lock = fopen($base . '/.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX)) sai(500, ['erro' => 'Não foi possível travar o arquivo de dados.']);
@@ -276,6 +281,36 @@ if ($acao === 'certremover') {
     @unlink("$d/$id.pfx"); @unlink("$d/$id.json"); limparPems();
     if (is_file("$d/padrao.txt") && trim(file_get_contents("$d/padrao.txt")) === $id) @unlink("$d/padrao.txt");
     sai(200, ['certificados' => certLista()]);
+}
+
+if ($acao === 'colabsalvar') {
+    $c = $in['colab'] ?? null;
+    if (!is_array($c)) sai(400, ['erro' => 'Dados do colaborador ausentes.']);
+    $nome = mb_substr(trim((string)($c['nome'] ?? '')), 0, 80);
+    if ($nome === '') sai(400, ['erro' => 'Informe o nome do colaborador.']);
+    $lista = colabsLer();
+    $id = (string)($c['id'] ?? '');
+    if ($id !== '' && !preg_match('/^[a-f0-9]{12}$/', $id)) sai(400, ['erro' => 'Colaborador inválido.']);
+    foreach ($lista as $o) if (mb_strtolower($o['nome']) === mb_strtolower($nome) && $o['id'] !== $id) sai(409, ['erro' => 'Já existe um colaborador com esse nome.']);
+    $setores = [];
+    foreach ((array)($c['setores'] ?? []) as $x) if (is_string($x) && count($setores) < 20) $setores[] = mb_substr($x, 0, 60);
+    $novo = ['nome' => $nome, 'cargo' => mb_substr(trim((string)($c['cargo'] ?? '')), 0, 80), 'setores' => $setores,
+             'email' => mb_substr(trim((string)($c['email'] ?? '')), 0, 120), 'telefone' => mb_substr(trim((string)($c['telefone'] ?? '')), 0, 40),
+             'ativo' => ($c['ativo'] ?? true) !== false, 'atualizadoEm' => date('c'), 'atualizadoPor' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80)];
+    $achou = false;
+    foreach ($lista as &$o) if ($o['id'] === $id) { $o = ['id' => $id, 'criadoEm' => $o['criadoEm'] ?? date('c')] + $novo; $achou = true; }
+    unset($o);
+    if (!$achou) { $id = bin2hex(random_bytes(6)); $lista[] = ['id' => $id, 'criadoEm' => date('c')] + $novo; }
+    usort($lista, function ($a, $b) { return strcasecmp($a['nome'], $b['nome']); });
+    if (file_put_contents(colabsArq(), json_encode($lista, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX) === false) sai(500, ['erro' => 'Não foi possível gravar.']);
+    sai(200, ['id' => $id, 'colaboradores' => $lista]);
+}
+
+if ($acao === 'colabexcluir') {
+    $id = (string)($in['id'] ?? '');
+    $lista = array_values(array_filter(colabsLer(), function ($o) use ($id) { return $o['id'] !== $id; }));
+    if (file_put_contents(colabsArq(), json_encode($lista, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX) === false) sai(500, ['erro' => 'Não foi possível gravar.']);
+    sai(200, ['colaboradores' => $lista]);
 }
 
 if ($acao === 'salvar') {

@@ -70,6 +70,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible,.tab:focus-visible{
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:16px;padding:5px 11px;background:var(--surface-2);font-size:14px;cursor:pointer;user-select:none}
 .chip input{margin:0;accent-color:var(--navy)}
+label.chip{text-transform:none;letter-spacing:0;font-weight:400;font-size:14px;color:var(--ink)}
 .chip.on{border-color:var(--navy);background:var(--gold-soft)}
 .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
 table.t{border-collapse:collapse;width:100%;font-size:14px}
@@ -184,11 +185,35 @@ table.t tr.off td{opacity:.45}
 .contato .top{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .contato .top b{font:700 14px var(--f-display);text-transform:uppercase;letter-spacing:.6px;color:var(--navy)}
 .contato input[type=text]{background:var(--surface)}
-.hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
-.hist li{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
-.hist li:last-child{border-bottom:0}
-.hist .q{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
-.hist .c{color:var(--muted);font-size:13px}
+/* Histórico em linha do tempo */
+.hist{list-style:none;margin:0;padding:0;position:relative}
+.hist::before{content:"";position:absolute;left:17px;top:6px;bottom:6px;width:2px;background:var(--line)}
+.hist li{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;padding:0 0 16px}
+.hist li:last-child{padding-bottom:0}
+.hist .av{width:36px;height:36px;border-radius:50%;background:var(--navy);color:var(--on-navy);display:grid;place-items:center;font:700 13px var(--f-display);letter-spacing:.5px;position:relative;z-index:1;box-shadow:0 0 0 4px var(--surface)}
+.hist li.cria .av{background:var(--ok);color:#fff}
+.hist li.sai .av{background:var(--c-out);color:#fff}
+.hist .hb{min-width:0;padding-top:2px}
+.hist .hl{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.hist .hn{font-weight:700}
+.hist .ha{color:var(--ink)}
+.hist .hq{margin-left:auto;color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hist .hc{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.hist .hc span{font-size:12px;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:1px 8px;color:var(--muted)}
+/* Colaboradores */
+.colab-grid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:18px;margin-top:18px;align-items:start}
+@media (max-width:900px){.colab-grid{grid-template-columns:minmax(0,1fr)}}
+.clist{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.citem{appearance:none;text-align:left;width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;color:var(--ink);font:inherit}
+.citem[aria-current="true"]{border-color:var(--navy);box-shadow:inset 3px 0 0 var(--gold)}
+.citem.off{opacity:.55}
+.citem .av{width:38px;height:38px;border-radius:50%;background:var(--navy);color:var(--on-navy);display:grid;place-items:center;font:700 14px var(--f-display)}
+.citem b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.citem small{color:var(--muted);font-size:13px}
+.citem .n{font:700 18px var(--f-display);color:var(--navy);text-align:right;font-variant-numeric:tabular-nums}
+.citem .n small{display:block;font:400 11px var(--f-body);color:var(--muted)}
+.resp-sel{display:flex;gap:6px;min-width:0}
+.resp-sel select{flex:1;min-width:0}
 @media (max-width:520px){.hist li{grid-template-columns:1fr;gap:2px}}
 .warnline{margin-top:8px;font-size:13px;color:var(--warn)}
 /* Tela de acesso: sempre clara, cobre o sistema */
@@ -251,6 +276,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-novo" aria-selected="true" data-view="novo">Memorando</button>
       <button class="tab" role="tab" id="tab-painel" aria-selected="false" data-view="painel">Painel gerencial</button>
+      <button class="tab" role="tab" id="tab-colab" aria-selected="false" data-view="colab">Colaboradores</button>
       <button class="tab" role="tab" id="tab-cfg" aria-selected="false" data-view="config" hidden>Configurações</button>
       <button class="tab" role="tab" id="tab-arq" aria-selected="false" data-view="arquivo">Arquivo <span class="count" id="countArq">0</span></button>
     </nav>
@@ -460,6 +486,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
         <div class="panel"><h3>Ativos por regime tributário</h3><p class="ps" id="psRegime"></p><div class="blist" id="blRegime"></div></div>
         <div class="panel"><h3>Ativos por setor atendido</h3><p class="ps">Empresas ativas que têm o setor marcado no memorando.</p><div class="blist" id="blSetor"></div></div>
         <div class="panel"><h3>Ativos no Simples por anexo</h3><p class="ps">Uma empresa pode estar em mais de um anexo.</p><div class="blist" id="blAnexo"></div></div>
+        <div class="panel"><h3>Empresas ativas por responsável</h3><p class="ps">Uma empresa conta para cada colaborador vinculado a ela.</p><div class="blist" id="blResp"></div></div>
         <div class="panel"><h3>Ferramentas configuradas</h3><p class="ps">Empresas ativas com cada ferramenta já configurada.</p><div class="blist" id="blFer"></div></div>
         <div class="panel"><h3>Motivos de saída</h3><p class="ps" id="psMotivo"></p><div class="blist" id="blMotivo"></div></div>
       </div>
@@ -467,6 +494,37 @@ body.locked .wrap,body.locked .toast{display:none!important}
       <div class="dash-grid">
         <div class="panel"><h3>Entradas no período</h3><div class="tbl-wrap"><table class="t" id="tbEnt"></table></div></div>
         <div class="panel"><h3>Saídas no período</h3><div class="tbl-wrap"><table class="t" id="tbSai"></table></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-colab" hidden>
+    <div class="dash-bar"><div><h2 class="dash-title">Colaboradores</h2><p class="dash-sub">Cadastre a equipe para vincular os responsáveis em cada memorando. As empresas de cada colaborador aparecem conforme os vínculos.</p></div>
+      <div class="row"><button class="btn primary" id="btnNovoColab" type="button">+ Novo colaborador</button></div></div>
+    <div class="colab-grid">
+      <div>
+        <div class="f"><label for="cl_busca">Pesquisar</label><input type="search" id="cl_busca" placeholder="Nome ou cargo"></div>
+        <div class="clist" id="clList"></div>
+      </div>
+      <div class="col">
+        <section class="card" id="clForm">
+          <h2 id="clTitulo">Novo colaborador</h2>
+          <div class="fields">
+            <div class="f half"><label for="cl_nome">Nome</label><input type="text" id="cl_nome"></div>
+            <div class="f"><label for="cl_cargo">Cargo</label><input type="text" id="cl_cargo" placeholder="Ex.: Analista fiscal"></div>
+            <div class="f"><label for="cl_email">E-mail</label><input type="text" id="cl_email"></div>
+            <div class="f"><label for="cl_tel">Telefone / ramal</label><input type="text" id="cl_tel"></div>
+            <div class="f wide"><span class="lbl">Setores em que atua</span><div class="chips" id="cl_setores" style="margin-top:4px"></div></div>
+            <div class="f"><label class="chip" style="align-self:flex-start"><input type="checkbox" id="cl_ativo" checked>Ativo</label></div>
+          </div>
+          <div class="row" style="margin-top:12px"><button class="btn primary" id="btnSalvarColab" type="button">Salvar colaborador</button>
+            <span class="sp" style="flex:1"></span><span id="clDel"></span></div>
+        </section>
+        <section class="card" id="clEmpresasCard" hidden>
+          <h2>Empresas vinculadas <span class="count" id="clQtd" style="font:600 12px var(--f-body);border:1px solid var(--line);border-radius:10px;padding:0 7px;color:var(--muted)">0</span></h2>
+          <p class="hint">Empresas em que o colaborador é responsável por algum setor no memorando.</p>
+          <div class="tbl-wrap"><table class="t" id="clEmpresas"></table></div>
+        </section>
       </div>
     </div>
   </div>
@@ -514,7 +572,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
     <div class="lg-rule"></div>
     <div class="lg-t">Memorandos de entrada de empresa</div>
     <div class="lg-s">Acesso restrito à equipe Facilitar</div>
-    <div class="f"><label for="lg_nome">Seu nome</label><input type="text" id="lg_nome" autocomplete="name" required></div>
+    <div class="f"><label for="lg_nome">Seu nome</label><input type="text" id="lg_nome" autocomplete="name" list="dlColabs" required><datalist id="dlColabs"></datalist></div>
     <div class="f"><label for="lg_senha">Senha de acesso</label><input type="password" id="lg_senha" autocomplete="current-password" required></div>
     <div id="lg_msg" class="small" style="color:#A63A32;min-height:18px"></div>
     <button class="btn primary" type="submit">Entrar</button>
@@ -634,7 +692,8 @@ let loginOk=null;
 function pedirLogin(msg){document.body.classList.add("locked");$("login").hidden=false;$("lg_msg").textContent=msg||"";if(CRED)$("lg_nome").value=CRED.nome||"";setTimeout(()=>$((CRED&&CRED.nome)?"lg_senha":"lg_nome").focus(),50)}
 async function carregarAPI(){
   if(!CERTS_OK) carregarCerts();
-  try{const j=await api("listar");ARQ=(j.memorandos||[]);renderNumero();renderLista();renderHist();if(!$("view-painel").hidden)renderPainel();if(!$("dbNotice").dataset.keep)$("dbNotice").hidden=true}
+  if(!COLABS.length) carregarColabs();
+  try{const j=await api("listar");ARQ=(j.memorandos||[]);renderNumero();renderLista();renderHist();if(!$("view-painel").hidden)renderPainel();if(!$("view-colab").hidden)renderColabs();if(!$("dbNotice").dataset.keep)$("dbNotice").hidden=true}
   catch(e){$("dbNotice").hidden=false;$("dbNotice").textContent="Não foi possível carregar o arquivo: "+e.message}
 }
 let ARQ=[];   // memorandos do arquivo (snapshot)
@@ -760,15 +819,31 @@ function renderTrib(){
   w.textContent=sem.length?"Sem anexo definido na tabela: "+sem.join(", ")+". Marque o anexo correspondente acima.":(!cur.length&&!S.atividades.length?"Busque o CNPJ ou inclua os CNAEs para sugerir os anexos.":"");
   $("fatorR").textContent=fr.length?"Sujeito ao fator r: "+fr.join(", ")+" (Anexo V, ou III se a folha for ≥ 28% da receita).":"";
 }
+function respCampo(d,ix){
+  const dis=d.on?"":"disabled";
+  const ativos=COLABS.filter(c=>c.ativo!==false||c.id===d.respId);
+  if(!ativos.length||d._livre||(d.resp&&!d.respId&&!COLABS.some(c=>c.nome.toLowerCase()===String(d.resp).trim().toLowerCase())))
+    return '<div class="resp-sel"><input type="text" data-resp="'+ix+'" value="'+esc(d.resp)+'" placeholder="'+(COLABS.length?"Nome do responsável":"Responsável (cadastre em Colaboradores)")+'" aria-label="Responsável '+esc(d.nome)+'" '+dis+'>'+(COLABS.length?'<button class="btn sm link" type="button" data-respvolta="'+ix+'" '+dis+'>Escolher da lista</button>':'')+'</div>';
+  const doSetor=ativos.filter(c=>(c.setores||[]).includes(d.nome)), outros=ativos.filter(c=>!(c.setores||[]).includes(d.nome));
+  const atual=d.respId||((COLABS.find(c=>c.nome.toLowerCase()===String(d.resp||"").trim().toLowerCase())||{}).id)||"";
+  const opt=c=>'<option value="'+esc(c.id)+'"'+(c.id===atual?" selected":"")+'>'+esc(c.nome)+(c.cargo?" · "+esc(c.cargo):"")+'</option>';
+  return '<div class="resp-sel"><select data-respsel="'+ix+'" aria-label="Responsável '+esc(d.nome)+'" '+dis+'><option value="">Selecionar responsável…</option>'+
+    (doSetor.length?'<optgroup label="'+esc(d.nome)+'">'+doSetor.map(opt).join("")+'</optgroup>':'')+(outros.length?'<optgroup label="'+(doSetor.length?"Outros colaboradores":"Colaboradores")+'">'+outros.map(opt).join("")+'</optgroup>':'')+
+    '<option value="__outro">Outro (digitar nome)</option></select></div>';
+}
 function renderDeps(){
   const box=$("deps");
   box.innerHTML=S.deps.map((d,ix)=>'<div class="dep"><label class="chip '+(d.on?"on":"")+'"><input type="checkbox" data-dep="'+ix+'" '+(d.on?"checked":"")+'>'+esc(d.nome)+'</label>'+
-    '<input type="text" data-resp="'+ix+'" value="'+esc(d.resp)+'" placeholder="Responsável" aria-label="Responsável '+esc(d.nome)+'" '+(d.on?"":"disabled")+'>'+
+    respCampo(d,ix)+
     (DEPS_PADRAO.includes(d.nome)?'<span></span>':'<button class="btn sm link" data-depdel="'+ix+'" type="button" aria-label="Remover setor">✕</button>')+'</div>').join("");
   box.querySelectorAll("[data-dep]").forEach(cb=>cb.onchange=()=>{S.deps[+cb.dataset.dep].on=cb.checked;renderDeps();changed()});
   if($("contatos").children.length||S.contatos.length) renderContatos();
-  box.querySelectorAll("[data-resp]").forEach(inp=>inp.oninput=()=>{S.deps[+inp.dataset.resp].resp=inp.value;changed()});
+  box.querySelectorAll("[data-resp]").forEach(inp=>inp.oninput=()=>{S.deps[+inp.dataset.resp].resp=inp.value;S.deps[+inp.dataset.resp].respId="";changed()});
+  box.querySelectorAll("[data-respsel]").forEach(sel=>sel.onchange=()=>{const dd=S.deps[+sel.dataset.respsel];
+    if(sel.value==="__outro"){dd.respId="";dd.resp="";dd._livre=true;renderDeps();const i=box.querySelector('[data-resp="'+sel.dataset.respsel+'"]');if(i)i.focus();changed();return}
+    const c=COLABS.find(x=>x.id===sel.value);dd.respId=c?c.id:"";dd.resp=c?c.nome:"";dd._livre=false;changed()});
   box.querySelectorAll("[data-depdel]").forEach(b=>b.onclick=()=>{S.deps.splice(+b.dataset.depdel,1);renderDeps();changed()});
+  box.querySelectorAll("[data-respvolta]").forEach(b=>b.onclick=()=>{const dd=S.deps[+b.dataset.respvolta];dd._livre=false;dd.resp="";dd.respId="";renderDeps();changed()});
 }
 function renderFerramentas(){
   $("ferramentas").innerHTML=FERRAMENTAS.map(f=>'<label class="chip '+(S.ferramentas.includes(f)?"on":"")+'"><input type="checkbox" data-fer="'+esc(f)+'" '+(S.ferramentas.includes(f)?"checked":"")+'>'+esc(f)+'</label>').join("");
@@ -1377,13 +1452,19 @@ function historicoDe(doc){
   return doc.criadoEm?[{acao:"Criou o memorando",por:doc.criadoPorNome||"",porId:doc.criadoPor||null,em:doc.criadoEm}]:[];
 }
 function nomeDe(e){return (e&&(e.por||(e.porId&&PROFILES[e.porId]&&PROFILES[e.porId].name)))||""}
+function nomeBonito(n){return String(n||"").trim().toLowerCase().replace(/(^|\s)(\S)/g,(m,a,b)=>a+b.toUpperCase()).replace(/\b(Da|De|Do|Das|Dos|E)\b/g,x=>x.toLowerCase())}
+function iniciais(n){const p=String(n||"?").trim().split(/\s+/).filter(x=>!/^(da|de|do|das|dos|e)$/i.test(x));return ((p[0]||"?")[0]+(p.length>1?p[p.length-1][0]:"")).toUpperCase()}
+function histHTML(h){
+  return [...h].reverse().map(e=>{const nome=nomeBonito(nomeDe(e))||"Sem nome", a=e.acao||"", cls=/^Criou/.test(a)?"cria":/saída|Cancelou/i.test(a)?"sai":"";
+    return '<li class="'+cls+'"><span class="av" aria-hidden="true">'+esc(iniciais(nome))+'</span><div class="hb"><div class="hl"><span class="hn">'+esc(nome)+'</span><span class="ha">'+esc(a.charAt(0).toLowerCase()+a.slice(1))+'</span><span class="hq">'+esc(dataHora(e.em))+'</span></div>'+
+      (e.campos&&e.campos.length?'<div class="hc">'+e.campos.map(c=>'<span>'+esc(c)+'</span>').join("")+'</div>':'')+'</div></li>'}).join("");
+}
 function renderHist(){
   const card=$("histCard"); if(!card) return;
   const doc=S.docId&&ARQ.find(x=>x._id===S.docId);
   const h=historicoDe(doc);
   card.hidden=!S.docId||!h.length;
-  $("hist").innerHTML=[...h].reverse().map(e=>'<li><span class="q">'+esc(dataHora(e.em))+'</span><div><b>'+esc(nomeDe(e)||"Sem nome")+'</b> '+esc((e.acao||"").charAt(0).toLowerCase()+(e.acao||"").slice(1))+
-    (e.campos&&e.campos.length?'<div class="c">'+esc(e.campos.join(", "))+'</div>':'')+'</div></li>').join("");
+  $("hist").innerHTML=histHTML(h);
 }
 
 /* ---------- arquivo (db) ---------- */
@@ -1581,7 +1662,7 @@ function visualizar(id){
   pages.forEach(p=>{const wrap=document.createElement("div");wrap.className="pv-page";wrap.style.width=(794*z)+"px";wrap.style.height=(1123*z)+"px";p.style.transformOrigin="0 0";p.style.transform="scale("+z+")";wrap.appendChild(p);body.appendChild(wrap)});
   $("stage").innerHTML="";
   const h=historicoDe(d);
-  if(h.length){const hb=document.createElement("div");hb.className="card";hb.style.width=(794*z)+"px";hb.innerHTML='<h2>Histórico</h2><ol class="hist">'+[...h].reverse().map(e=>'<li><span class="q">'+esc(dataHora(e.em))+'</span><div><b>'+esc(nomeDe(e)||"Sem nome")+'</b> '+esc((e.acao||"").charAt(0).toLowerCase()+(e.acao||"").slice(1))+(e.campos&&e.campos.length?'<div class="c">'+esc(e.campos.join(", "))+'</div>':'')+'</div></li>').join("")+'</ol>';body.appendChild(hb)}
+  if(h.length){const hb=document.createElement("div");hb.className="card";hb.style.width=(794*z)+"px";hb.innerHTML='<h2>Histórico</h2><ol class="hist">'+histHTML(h)+'</ol>';body.appendChild(hb)}
   $("vwClose").focus();
 }
 function fecharViewer(){$("viewer").hidden=true;document.body.style.overflow="";$("vwBody").innerHTML="";vwId=null}
@@ -1626,6 +1707,88 @@ async function carregarPerfis(){
   const ids=[...new Set(ARQ.flatMap(d=>[d.criadoPor,...historicoDe(d).map(e=>e.porId)]).filter(Boolean))].slice(0,64);
   if(!ids.length)return;
   try{PROFILES=await USER.profiles(ids)||{};renderLista()}catch(e){}
+}
+
+/* ---------- colaboradores ---------- */
+let COLABS=[], colabSel=null, colabConfirm=false, colabUnsub=null;
+function colabEmpresas(c){
+  const nm=String(c.nome||"").trim().toLowerCase();
+  const out=[];
+  ARQ.filter(d=>d.status!=="cancelado").forEach(d=>{
+    const set=(d.deps||[]).filter(x=>x.on&&(x.respId===c.id||(!x.respId&&String(x.resp||"").trim().toLowerCase()===nm))).map(x=>x.nome);
+    if(set.length) out.push({d,setores:set});
+  });
+  return out.sort((a,b)=>Number(inativo(a.d))-Number(inativo(b.d))||String(a.d.e_razao||"").localeCompare(String(b.d.e_razao||"")));
+}
+async function carregarColabs(){
+  try{
+    if(MODO==="api"){const j=await api("colabs");COLABS=j.colaboradores||[];aposColabs()}
+    else if(DB&&!colabUnsub){colabUnsub=DB.collection("colaboradores").orderBy("nome").limit(500).onSnapshot(sn=>{COLABS=sn.docs.filter(x=>x.exists).map(x=>Object.assign({id:x.id},x.data()));aposColabs()},()=>{})}
+  }catch(e){}
+}
+function aposColabs(){
+  renderDeps();
+  if(!$("view-colab").hidden) renderColabs();
+  const dl=$("dlColabs"); if(dl) dl.innerHTML=COLABS.filter(c=>c.ativo!==false).map(c=>'<option value="'+esc(c.nome)+'">').join("");
+}
+function renderColabs(){
+  const q=$("cl_busca").value.trim().toLowerCase();
+  const lista=COLABS.filter(c=>!q||(c.nome+" "+(c.cargo||"")).toLowerCase().includes(q));
+  $("clList").innerHTML=lista.length?lista.map(c=>{const n=colabEmpresas(c).filter(x=>ativo(x.d)).length;
+    return '<button type="button" class="citem'+(c.ativo===false?" off":"")+'" data-cl="'+esc(c.id)+'" aria-current="'+(colabSel===c.id)+'"><span class="av">'+esc(iniciais(c.nome))+'</span><span style="min-width:0"><b>'+esc(c.nome)+'</b><small>'+esc(c.cargo||"Sem cargo")+(c.ativo===false?" · inativo":"")+'</small></span><span class="n">'+n+'<small>empresa'+(n===1?"":"s")+'</small></span></button>'}).join("")
+    :'<div class="empty" style="margin-top:0">'+(COLABS.length?"Nenhum colaborador encontrado.":"Nenhum colaborador cadastrado. Use o formulário ao lado para cadastrar o primeiro.")+'</div>';
+  $("clList").querySelectorAll("[data-cl]").forEach(b=>b.onclick=()=>{colabSel=b.dataset.cl;colabConfirm=false;preencherColab();renderColabs()});
+  if(!$("cl_setores").children.length||$("cl_setores").dataset.sig!==S.deps.map(x=>x.nome).join("|")) preencherColab(true);
+  renderColabEmpresas();
+}
+function preencherColab(soSetores){
+  const c=COLABS.find(x=>x.id===colabSel)||{nome:"",cargo:"",email:"",telefone:"",setores:[],ativo:true};
+  const nomes=[...new Set([...DEPS_PADRAO,...S.deps.map(x=>x.nome),...(c.setores||[])])];
+  const marcados=soSetores?[...$("cl_setores").querySelectorAll("input:checked")].map(x=>x.value):(c.setores||[]);
+  $("cl_setores").innerHTML=nomes.map(n=>'<label class="chip '+(marcados.includes(n)?"on":"")+'"><input type="checkbox" value="'+esc(n)+'" '+(marcados.includes(n)?"checked":"")+'>'+esc(n)+'</label>').join("");
+  $("cl_setores").dataset.sig=S.deps.map(x=>x.nome).join("|");
+  $("cl_setores").querySelectorAll("input").forEach(i=>i.onchange=()=>i.parentElement.classList.toggle("on",i.checked));
+  if(soSetores) return;
+  $("clTitulo").textContent=colabSel?"Editar colaborador":"Novo colaborador";
+  $("cl_nome").value=c.nome||"";$("cl_cargo").value=c.cargo||"";$("cl_email").value=c.email||"";$("cl_tel").value=c.telefone||"";$("cl_ativo").checked=c.ativo!==false;
+  renderColabDel();
+}
+function renderColabDel(){
+  const el=$("clDel");
+  if(!colabSel){el.innerHTML="";return}
+  el.innerHTML=colabConfirm?'<span class="confirm">Excluir o cadastro? Os memorandos mantêm o nome. <button class="btn sm danger" type="button" id="clDelOk">Excluir</button><button class="btn sm link" type="button" id="clDelNo">Voltar</button></span>':'<button class="btn sm danger" type="button" id="clDelBtn">Excluir colaborador</button>';
+  const b=$("clDelBtn");if(b)b.onclick=()=>{colabConfirm=true;renderColabDel()};
+  const n=$("clDelNo");if(n)n.onclick=()=>{colabConfirm=false;renderColabDel()};
+  const o=$("clDelOk");if(o)o.onclick=excluirColab;
+}
+function renderColabEmpresas(){
+  const c=COLABS.find(x=>x.id===colabSel), card=$("clEmpresasCard");
+  card.hidden=!c; if(!c) return;
+  const emp=colabEmpresas(c);
+  $("clQtd").textContent=emp.filter(x=>ativo(x.d)).length+" ativa"+(emp.filter(x=>ativo(x.d)).length===1?"":"s");
+  $("clEmpresas").innerHTML=emp.length?'<thead><tr><th>Nº</th><th>Empresa</th><th>Setores</th><th>Regime</th><th>Situação</th><th></th></tr></thead><tbody>'+emp.map(x=>'<tr'+(inativo(x.d)?' class="off"':'')+'><td class="num">'+esc(numeroTxt(x.d.seq,x.d.ano))+'</td><td><b>'+esc(x.d.e_fantasia||x.d.e_razao||"—")+'</b><div class="small muted">'+esc(x.d.e_cnpj||"")+'</div></td><td>'+esc(x.setores.join(", "))+'</td><td>'+esc(x.d.t_regime||"—")+'</td><td>'+(inativo(x.d)?'<span class="pill v">saiu em '+esc(br(x.d.dataSaida))+'</span>':'<span class="pill okp">ativa</span>')+'</td><td><button class="btn sm" type="button" data-clver="'+esc(x.d._id)+'">Visualizar</button></td></tr>').join("")+'</tbody>'
+    :'<tbody><tr><td class="muted">Nenhuma empresa vinculada ainda. Escolha este colaborador como responsável de um setor no memorando.</td></tr></tbody>';
+  $("clEmpresas").querySelectorAll("[data-clver]").forEach(b=>b.onclick=()=>visualizar(b.dataset.clver));
+}
+async function salvarColab(){
+  const c={id:colabSel||"",nome:$("cl_nome").value.trim(),cargo:$("cl_cargo").value.trim(),email:$("cl_email").value.trim(),telefone:$("cl_tel").value.trim(),
+    setores:[...$("cl_setores").querySelectorAll("input:checked")].map(x=>x.value),ativo:$("cl_ativo").checked};
+  if(!c.nome){toast("Informe o nome do colaborador.");$("cl_nome").focus();return}
+  if(COLABS.some(x=>x.id!==c.id&&x.nome.toLowerCase()===c.nome.toLowerCase())){toast("Já existe um colaborador com esse nome.");return}
+  try{
+    if(MODO==="api"){const j=await api("colabsalvar",{colab:c,usuario:quem()});COLABS=j.colaboradores||[];colabSel=j.id;aposColabs()}
+    else{ if(!DB){toast("Cadastro indisponível nesta visualização.");return}
+      const id=c.id||("c"+Date.now().toString(36)); const {id:_,...dados}=c; await DB.doc("colaboradores/"+id).set({...dados,atualizadoEm:new Date().toISOString()}); colabSel=id; }
+    toast("Colaborador salvo.");preencherColab();renderColabs();
+  }catch(e){toast(e.message||"Não foi possível salvar.")}
+}
+async function excluirColab(){
+  const id=colabSel; colabConfirm=false;
+  try{
+    if(MODO==="api"){const j=await api("colabexcluir",{id});COLABS=j.colaboradores||[];aposColabs()}
+    else await DB.doc("colaboradores/"+id).delete();
+    colabSel=null;preencherColab();renderColabs();toast("Colaborador excluído.");
+  }catch(e){toast(e.message||"Não foi possível excluir.")}
 }
 
 /* ---------- painel gerencial ---------- */
@@ -1713,6 +1876,7 @@ function renderPainel(){
   const at=atFim.map(e=>e.d);
   $("psRegime").textContent=at.length+" empresas ativas em "+br(fimRef);
   listaBarras($("blRegime"),contar(at.map(d=>(d.t_regime||"Não informado")+(d.t_regime==="Simples Nacional"&&d.t_modalidade?" – "+d.t_modalidade:""))),"","Sem empresas ativas.");
+  listaBarras($("blResp"),contar(at.flatMap(d=>[...new Set((d.deps||[]).filter(x=>x.on&&String(x.resp||"").trim()).map(x=>{const c=x.respId&&COLABS.find(k=>k.id===x.respId);return c?c.nome:nomeBonito(x.resp)}))])),"","Nenhum responsável informado nas empresas ativas.");
   listaBarras($("blFer"),contar(at.flatMap(d=>(d.ferramentas&&d.ferramentas.length)?d.ferramentas:["Nenhuma marcada"])),"","Sem empresas ativas.");
   listaBarras($("blSetor"),contar(at.flatMap(d=>(d.deps||[]).filter(x=>x.on).map(x=>x.nome))),"","Nenhum setor marcado nas empresas ativas.");
   listaBarras($("blAnexo"),contar(at.filter(d=>/simples/i.test(d.t_regime||"")).flatMap(d=>{const bak={a:S.atividades,m:S.anexosManual};S.atividades=d.atividades||[];S.anexosManual=d.anexosManual||null;const r=anexosAtuais();S.atividades=bak.a;S.anexosManual=bak.m;return (r.length?r:["Sem anexo"]).map(x=>x==="Sem anexo"?x:"Anexo "+x)})),"","Nenhuma empresa ativa no Simples Nacional.");
@@ -1747,9 +1911,9 @@ async function painelPdf(){
 
 /* ---------- views ---------- */
 function showView(vw){
-  $("view-novo").hidden=vw!=="novo";$("view-arquivo").hidden=vw!=="arquivo";$("view-painel").hidden=vw!=="painel";$("view-config").hidden=vw!=="config";$("tab-cfg").setAttribute("aria-selected",vw==="config");
+  $("view-novo").hidden=vw!=="novo";$("view-arquivo").hidden=vw!=="arquivo";$("view-painel").hidden=vw!=="painel";$("view-config").hidden=vw!=="config";$("tab-cfg").setAttribute("aria-selected",vw==="config");$("view-colab").hidden=vw!=="colab";$("tab-colab").setAttribute("aria-selected",vw==="colab");
   $("tab-novo").setAttribute("aria-selected",vw==="novo");$("tab-arq").setAttribute("aria-selected",vw==="arquivo");$("tab-painel").setAttribute("aria-selected",vw==="painel");
-  if(vw==="arquivo")renderLista(); else if(vw==="painel")renderPainel(); else if(vw==="config")carregarCerts(); else schedulePreview();
+  if(vw==="arquivo")renderLista(); else if(vw==="painel")renderPainel(); else if(vw==="config")carregarCerts(); else if(vw==="colab")renderColabs(); else schedulePreview();
 }
 
 /* ---------- eventos ---------- */
@@ -1770,6 +1934,9 @@ $("btnAddSv").onclick=()=>{let it=$("addSv").value.trim();const dd=dig(it);if(dd
   if(!/^\d{2}\.\d{2}$/.test(it)){toast("Código no formato 00.00.");return}
   S.svExtra.push({item:it,desc:$("addSvDesc").value.trim()||LC116[it]||"",anexo:$("addSvAnx").value});$("addSv").value="";$("addSvDesc").value="";$("addSvAnx").value="";renderServicos();changed()};
 $("btnIE").onclick=()=>buscarIE(false);
+$("btnSalvarColab").onclick=salvarColab;
+$("btnNovoColab").onclick=()=>{colabSel=null;colabConfirm=false;preencherColab();renderColabs();$("cl_nome").focus()};
+$("cl_busca").addEventListener("input",renderColabs);
 $("vwClose").onclick=fecharViewer;
 $("viewer").addEventListener("click",e=>{if(e.target.id==="viewer")fecharViewer()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("viewer").hidden)fecharViewer()});
@@ -1817,9 +1984,10 @@ $("btnApresentar").onclick=async()=>{const el=$("painelBody");try{if(el.requestF
   if(!DL){$("btnPdf").hidden=true;$("btnDocx").hidden=true}
   if(!DB){$("dbNotice").hidden=false;$("dbNotice").textContent="O arquivo de memorandos não está disponível nesta visualização. Entre com sua conta no claude.ai para salvar e pesquisar.";$("btnSalvar").disabled=true;renderLista();return}
   if(USER&&USER.can){try{const w=await USER.can("data.write");if(w===false){$("btnSalvar").disabled=true;$("dbNotice").hidden=false;$("dbNotice").className="notice info";$("dbNotice").textContent="Você pode consultar e baixar os memorandos, mas não gravar novos."}}catch(e){}}
+  carregarColabs();
   DB.collection("memorandos").orderBy("criadoEm","desc").limit(1000).onSnapshot(snap=>{
     ARQ=snap.docs.filter(x=>x.exists).map(x=>Object.assign({_id:x.id},x.data()));
-    renderNumero();renderLista();renderHist();carregarPerfis();if(!$("view-painel").hidden)renderPainel();
+    renderNumero();renderLista();renderHist();carregarPerfis();if(!$("view-painel").hidden)renderPainel();if(!$("view-colab").hidden)renderColabs();
   },err=>{$("dbNotice").hidden=false;$("dbNotice").textContent="Não foi possível carregar o arquivo ("+err.code+"). Recarregue a página."});
 })();
 </script>
