@@ -7,7 +7,15 @@ Formulário de memorando para clientes novos: consulta de CNPJ, regime tributár
 - `api.php` — guarda os memorandos em `dados/` e consulta o CNPJ (BrasilAPI, com ReceitaWS como alternativa).
 - `config.exemplo.php` — modelo da configuração da senha.
 
-## Instalação na Hostinger
+## Instalação no Easypanel (VPS Hostinger)
+1. No Easypanel, crie um serviço **App** e escolha como fonte o GitHub: repositório `developermjautomacoes-jpg/facilitar`, branch `main`.
+2. Em **Build**, selecione **Dockerfile** (arquivo `Dockerfile`).
+3. Em **Environment**, adicione `SENHA_ACESSO=sua-senha`.
+4. Em **Mounts**, crie um **Volume** chamado `dados` com caminho `/data`. É onde ficam os memorandos; sem ele, os dados se perdem a cada atualização.
+5. Em **Domains**, aponte o domínio para a porta `80`. O sistema responde tanto na raiz quanto em `/memorandos`.
+6. Clique em **Deploy**. Ative o **Auto Deploy** para publicar a cada push.
+
+## Instalação em hospedagem compartilhada
 1. Publique o repositório na pasta do site (Git da Hostinger ou upload dos arquivos).
 2. No servidor, copie `config.exemplo.php` para `config.php` e defina `SENHA_ACESSO`.
 3. Acesse o endereço da pasta e entre com seu nome e a senha.

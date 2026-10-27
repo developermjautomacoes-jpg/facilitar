@@ -7,8 +7,9 @@
 
 // ================== CONFIGURAÇÃO ==================
 // A senha fica em config.php (fora do Git). Crie o arquivo a partir de config.exemplo.php.
+// No Easypanel/Docker, use a variável de ambiente SENHA_ACESSO (e DADOS_DIR para a pasta de dados).
 if (file_exists(__DIR__ . '/config.php')) require __DIR__ . '/config.php';
-if (!defined('SENHA_ACESSO')) define('SENHA_ACESSO', 'TROQUE-ESTA-SENHA');
+if (!defined('SENHA_ACESSO')) define('SENHA_ACESSO', getenv('SENHA_ACESSO') ?: 'TROQUE-ESTA-SENHA');
 // ==================================================
 
 date_default_timezone_set('America/Sao_Paulo');
@@ -23,7 +24,7 @@ function sai($code, $arr) {
 }
 
 if (SENHA_ACESSO === 'TROQUE-ESTA-SENHA') {
-    sai(500, ['erro' => 'Crie o arquivo config.php no servidor (copie config.exemplo.php) e defina a senha de acesso.']);
+    sai(500, ['erro' => 'Defina a senha de acesso: variável de ambiente SENHA_ACESSO (Easypanel) ou arquivo config.php.']);
 }
 
 $senha = $_SERVER['HTTP_X_SENHA'] ?? '';
@@ -32,7 +33,7 @@ if (!is_string($senha) || !hash_equals(SENHA_ACESSO, $senha)) {
     sai(401, ['erro' => 'Senha inválida.']);
 }
 
-$base   = __DIR__ . '/dados';
+$base   = rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/');
 $memDir = $base . '/memorandos';
 if (!is_dir($memDir) && !mkdir($memDir, 0755, true)) {
     sai(500, ['erro' => 'Não foi possível criar a pasta de dados no servidor. Verifique as permissões.']);
