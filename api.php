@@ -120,6 +120,76 @@ if ($acao === 'cnpj') {
     sai(502, ['erro' => $ultimo ?: 'Não foi possível consultar o CNPJ.']);
 }
 
+// ---------- inscrição estadual (SEFAZ, webservice CadConsultaCadastro4 com certificado A1) ----------
+// Certificado: variável CERT_PFX_BASE64 (conteúdo do .pfx em base64) ou arquivo DADOS_DIR/certificado.pfx; senha em CERT_SENHA.
+function certPem(&$erro) {
+    $pfx = null;
+    $b64 = getenv('CERT_PFX_BASE64');
+    if ($b64) $pfx = base64_decode(preg_replace('/\s+/', '', $b64), true);
+    $base = rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/');
+    if (!$pfx && is_file($base . '/certificado.pfx')) $pfx = file_get_contents($base . '/certificado.pfx');
+    if (!$pfx) { $erro = 'Certificado não configurado no servidor (CERT_PFX_BASE64 e CERT_SENHA).'; return null; }
+    $pem = sys_get_temp_dir() . '/memo-cert-' . substr(hash('sha256', $pfx), 0, 16) . '.pem';
+    if (is_file($pem)) return $pem;
+    $c = [];
+    if (!openssl_pkcs12_read($pfx, $c, (string)getenv('CERT_SENHA'))) {
+        $erro = 'Não foi possível abrir o certificado: confira a senha (CERT_SENHA) e o arquivo.'; return null;
+    }
+    $conteudo = $c['cert'] . "\n" . $c['pkey'] . "\n" . implode("\n", $c['extracerts'] ?? []);
+    $old = umask(0077); file_put_contents($pem, $conteudo); umask($old); @chmod($pem, 0600);
+    return $pem;
+}
+function soapCadastro($url, $xml, $pem, $verificar) {
+    $env = '<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/CadConsultaCadastro4">' . $xml . '</nfeDadosMsg></soap12:Body></soap12:Envelope>';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_POST => true, CURLOPT_POSTFIELDS => $env, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_SSLCERT => $pem, CURLOPT_SSLKEY => $pem, CURLOPT_SSL_VERIFYPEER => $verificar, CURLOPT_SSL_VERIFYHOST => $verificar ? 2 : 0,
+        CURLOPT_HTTPHEADER => ['Content-Type: application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/CadConsultaCadastro4/consultaCadastro"']]);
+    $body = curl_exec($ch); $errno = curl_errno($ch); $err = curl_error($ch); $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+    return [$body, $errno, $err, $code];
+}
+function lerRetCadastro($body) {
+    $dom = new DOMDocument();
+    if (!@$dom->loadXML($body)) return null;
+    $xp = new DOMXPath($dom);
+    $t = function ($q, $ctx = null) use ($xp) { $n = $xp->query($q, $ctx); return $n && $n->length ? trim($n->item(0)->textContent) : ''; };
+    $ret = ['cStat' => $t('//*[local-name()="infCons"]/*[local-name()="cStat"]'), 'xMotivo' => $t('//*[local-name()="infCons"]/*[local-name()="xMotivo"]'), 'cadastros' => []];
+    foreach ($xp->query('//*[local-name()="infCad"]') as $ic) {
+        $ret['cadastros'][] = [
+            'ie' => $t('./*[local-name()="IE"]', $ic), 'cnpj' => $t('./*[local-name()="CNPJ"]', $ic), 'uf' => $t('./*[local-name()="UF"]', $ic),
+            'situacao' => $t('./*[local-name()="cSit"]', $ic) === '1' ? 'Habilitado' : 'Não habilitado',
+            'nfe' => $t('./*[local-name()="indCredNFe"]', $ic), 'nome' => $t('./*[local-name()="xNome"]', $ic),
+            'regime' => $t('./*[local-name()="xRegApur"]', $ic), 'inicio' => $t('./*[local-name()="dIniAtiv"]', $ic),
+            'ultimaSituacao' => $t('./*[local-name()="dUltSit"]', $ic), 'municipio' => $t('.//*[local-name()="xMun"]', $ic),
+        ];
+    }
+    return $ret;
+}
+if ($acao === 'ie') {
+    $c = preg_replace('/\D/', '', $_GET['cnpj'] ?? '');
+    $uf = strtoupper(preg_replace('/[^a-z]/i', '', $_GET['uf'] ?? 'ES')) ?: 'ES';
+    if (strlen($c) !== 14) sai(400, ['erro' => 'CNPJ deve ter 14 dígitos.']);
+    // SVRS atende o ES (e outras UFs) na consulta de cadastro
+    $svrs = ['AC', 'ES', 'PB', 'RN', 'SC', 'RJ', 'PI', 'TO', 'RO', 'AL', 'AP', 'DF', 'PA', 'RR', 'SE'];
+    if (!in_array($uf, $svrs, true)) sai(400, ['erro' => "Consulta de IE automática ainda não configurada para $uf. Preencha a IE manualmente."]);
+    if (!function_exists('curl_init')) sai(500, ['erro' => 'O servidor não tem cURL.']);
+    $erro = '';
+    $pem = certPem($erro);
+    if (!$pem) sai(500, ['erro' => $erro]);
+    $xml = '<ConsCad xmlns="http://www.portalfiscal.inf.br/nfe" versao="2.00"><infCons><xServ>CONS-CAD</xServ><UF>' . $uf . '</UF><CNPJ>' . $c . '</CNPJ></infCons></ConsCad>';
+    $url = 'https://cad.svrs.rs.gov.br/ws/cadconsultacadastro/cadconsultacadastro4.asmx';
+    [$body, $errno, $err, $code] = soapCadastro($url, $xml, $pem, true);
+    $semVerificacao = false;
+    if ($errno === 60 || $errno === 77) { // cadeia de certificados da SEFAZ fora do repositório do servidor
+        [$body, $errno, $err, $code] = soapCadastro($url, $xml, $pem, false); $semVerificacao = true;
+    }
+    if ($errno) sai(502, ['erro' => 'SEFAZ indisponível: ' . $err]);
+    $r = lerRetCadastro((string)$body);
+    if (!$r) sai(502, ['erro' => 'Resposta inesperada da SEFAZ (HTTP ' . $code . ').']);
+    $r['sslNaoVerificado'] = $semVerificacao;
+    sai(200, $r);
+}
+
 // ---------- gravações (com trava para a numeração) ----------
 $lock = fopen($base . '/.lock', 'c');
 if (!$lock || !flock($lock, LOCK_EX)) sai(500, ['erro' => 'Não foi possível travar o arquivo de dados.']);

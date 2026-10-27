@@ -289,8 +289,8 @@ body.locked .wrap,body.locked .toast{display:none!important}
             <div class="f"><label for="e_situacao">Situação cadastral</label><input type="text" id="e_situacao"></div>
             <div class="f half"><label for="e_natureza">Natureza jurídica</label><input type="text" id="e_natureza"></div>
             <div class="f"><label for="e_capital">Capital social</label><input type="text" id="e_capital"></div>
-            <div class="f"><label for="e_nire">NIRE</label><input type="text" id="e_nire"></div>
-            <div class="f"><label for="e_ie">Inscrição estadual</label><input type="text" id="e_ie"></div>
+            <div class="f"><label for="e_nire">NIRE</label><input type="text" id="e_nire"><a class="small" href="https://www.simplifica.es.gov.br/s/consultar-empresa" target="_blank" rel="noopener" style="color:var(--blue)">Consultar na JUCEES (login gov.br)</a></div>
+            <div class="f"><label for="e_ie">Inscrição estadual</label><input type="text" id="e_ie"><button class="btn link small" id="btnIE" type="button" style="padding:0;justify-content:flex-start" hidden>Buscar na SEFAZ</button><span class="small muted" id="ieInfo"></span></div>
             <div class="f"><label for="e_im">Inscrição municipal</label><input type="text" id="e_im"></div>
             <div class="f wide"><label for="e_endereco">Endereço</label><input type="text" id="e_endereco"></div>
             <div class="f wide"><span class="lbl">Quadro societário</span>
@@ -308,11 +308,15 @@ body.locked .wrap,body.locked .toast{display:none!important}
             <div class="f"><label for="t_regime">Opção tributária</label>
               <select id="t_regime">
                 <option value="">Selecionar…</option>
-                <option>Simples Nacional</option><option>MEI (SIMEI)</option><option>Lucro Presumido</option>
-                <option>Lucro Real Trimestral</option><option>Lucro Real Anual</option><option>Lucro Arbitrado</option><option>Imune / Isenta</option>
+                <optgroup label="Simples Nacional"><option>Simples Nacional</option><option>MEI (SIMEI)</option></optgroup>
+                <optgroup label="Regime normal"><option>Lucro Presumido</option><option>Lucro Real Trimestral</option><option>Lucro Real Anual</option><option>Lucro Arbitrado</option></optgroup>
+                <optgroup label="Outros"><option>Imune / Isenta</option></optgroup>
               </select></div>
+            <div class="f" id="modBox" hidden><label for="t_modalidade">Simples: IBS/CBS</label>
+              <select id="t_modalidade"><option value="">Selecionar…</option><option value="Puro">Puro (IBS/CBS dentro do DAS)</option><option value="Híbrido">Híbrido (IBS/CBS pelo regime regular)</option></select></div>
             <div class="f half"><label for="t_simples">Situação no Simples (Receita)</label><input type="text" id="t_simples"></div>
           </div>
+          <div id="regHint" class="warnline" hidden></div>
           <div id="anexosBox" style="margin-top:12px" hidden>
             <div class="lbl" style="margin-bottom:6px">Anexos do Simples Nacional <span class="muted small" id="anexosSrc" style="text-transform:none;letter-spacing:0;font-weight:400"></span></div>
             <div class="chips" id="anexos"></div>
@@ -376,6 +380,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
             <div class="f"><label for="r_sintegra">Sintegra</label><input type="text" id="r_sintegra"></div>
             <div class="f"><label for="r_spedc">SPED Contábil</label><select id="r_spedc"><option></option><option>Sim</option><option>Não</option></select></div>
             <div class="f"><label for="r_spedf">SPED Fiscal</label><select id="r_spedf"><option></option><option>Sim</option><option>Não</option></select></div>
+            <div class="f wide"><span class="lbl">Ferramentas já configuradas para a empresa</span><div class="chips" id="ferramentas" style="margin-top:4px"></div></div>
             <div class="f wide"><span class="lbl">Fará a emissão de</span><div class="chips" id="emissao" style="margin-top:4px"></div></div>
             <div class="f"><label for="r_loginNfse">Login NFS-e</label><input type="text" id="r_loginNfse"></div>
             <div class="f"><label for="r_senhaNfse">Senha NFS-e</label><input type="text" id="r_senhaNfse" placeholder="Ex.: salva no cofre"></div>
@@ -438,6 +443,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
         <div class="panel"><h3>Ativos por regime tributário</h3><p class="ps" id="psRegime"></p><div class="blist" id="blRegime"></div></div>
         <div class="panel"><h3>Ativos por setor atendido</h3><p class="ps">Empresas ativas que têm o setor marcado no memorando.</p><div class="blist" id="blSetor"></div></div>
         <div class="panel"><h3>Ativos no Simples por anexo</h3><p class="ps">Uma empresa pode estar em mais de um anexo.</p><div class="blist" id="blAnexo"></div></div>
+        <div class="panel"><h3>Ferramentas configuradas</h3><p class="ps">Empresas ativas com cada ferramenta já configurada.</p><div class="blist" id="blFer"></div></div>
         <div class="panel"><h3>Motivos de saída</h3><p class="ps" id="psMotivo"></p><div class="blist" id="blMotivo"></div></div>
       </div>
       <div class="panel"><h3>Resumo mensal</h3><p class="ps" id="psResumo"></p><div class="tbl-wrap"><table class="t mtab" id="tbMes"></table></div></div>
@@ -498,6 +504,7 @@ const LAYOUT = {
 const ENDERECO_ESC = "Av. Eldes Scherrer Souza, 2162, Cond. Complexo Montserrat, Salas 301/303, Colina de Laranjeiras, Serra/ES · (27) 3068-8502";
 const OBS_PADRAO = "Aos setores, favor comunicar ao cliente todas as obrigações que devem ser respeitadas no início de suas atividades (tributação e classificação de produtos), em caso de troca de endereço, mudança de razão social e demais, para que sigamos a legislação vigente.\n\nCaso a empresa não tenha certificado digital, favor prestar as orientações para que faça o mesmo o mais rápido possível, de preferência o A1.\n\nSetor contábil, favor solicitar ao antigo escritório contábil da empresa os saldos iniciais para continuidade na contabilidade.";
 const DEPS_PADRAO = ["Contábil","Fiscal","Departamento Pessoal (RH)","Societário / Legalização","Financeiro"];
+const FERRAMENTAS = ["Veri","Domínio","Sieg","Acessórias"];
 const EMISSOES = ["NF-e","NFC-e","NFS-e","CT-e","MDF-e","Não emite"];
 const MESES = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
 
@@ -564,6 +571,7 @@ const S = {
   emissao:[],
   contatos:[],
   socios:[],
+  ferramentas:[],
   original:null   // cópia do memorando como foi aberto/salvo (para o histórico)
 };
 let DB=null, USER=null, DL=null, MCP=null, MY_ID=null, MY_NAME="";
@@ -591,7 +599,7 @@ let ARQ=[];   // memorandos do arquivo (snapshot)
 let PROFILES={};
 
 /* ---------- formulário <-> dados ---------- */
-const FIELD_IDS=["m_data","m_assunto","e_razao","e_fantasia","e_cnpj","e_abertura","e_desde","e_situacao","e_natureza","e_capital","e_nire","e_ie","e_im","e_endereco","e_tel","e_email","t_regime","t_simples","r_prolabore","r_folha","r_cert","r_dominio","r_sintegra","r_spedc","r_spedf","r_loginNfse","r_senhaNfse","r_codSimples","r_sefaz","r_cpfAdm","r_pis","r_docs","obs"];
+const FIELD_IDS=["m_data","m_assunto","e_razao","e_fantasia","e_cnpj","e_abertura","e_desde","e_situacao","e_natureza","e_capital","e_nire","e_ie","e_im","e_endereco","e_tel","e_email","t_regime","t_modalidade","t_simples","r_prolabore","r_folha","r_cert","r_dominio","r_sintegra","r_spedc","r_spedf","r_loginNfse","r_senhaNfse","r_codSimples","r_sefaz","r_cpfAdm","r_pis","r_docs","obs"];
 function isSimples(reg){return /simples|mei/i.test(reg||"")}
 function anexosAuto(){
   const set=new Set();
@@ -621,7 +629,7 @@ function getForm(){
   d.anexosManual=S.anexosManual?[...S.anexosManual]:null;
   d.deps=S.deps.map(x=>({...x})); d.emissao=[...S.emissao];
   d.contatos=S.contatos.map(c=>({...c,setores:[...(c.setores||[])]}));
-  d.socios=S.socios.map(x=>({...x}));
+  d.socios=S.socios.map(x=>({...x})); d.ferramentas=[...S.ferramentas];
   d.seq=S.seq; d.ano=S.ano; d.status=S.status;
   d.m_numero=$("m_numero").value;
   const pm=parseNum(d.m_numero); if(pm){d.seq=pm.seq;d.ano=pm.ano}
@@ -641,6 +649,7 @@ function setForm(d){
   S.deps=(d.deps&&d.deps.length?d.deps:DEPS_PADRAO.map(n=>({nome:n,on:false,resp:""}))).map(x=>({...x}));
   S.emissao=[...(d.emissao||[])];
   S.contatos=contatosDe(d);
+  S.ferramentas=[...(d.ferramentas||[])];
   S.socios=(d.socios||[]).map(x=>({nome:"",qualificacao:"",entrada:"",...x}));
   $("m_numero").value = d.m_numero!=null ? d.m_numero : (d.seq&&d.ano&&S.docId ? numeroTxt(d.seq,d.ano) : "");
   renderAll();
@@ -689,6 +698,12 @@ function renderServicos(){
 function renderTrib(){
   const reg=$("t_regime").value, box=$("anexosBox");
   box.hidden=!/simples/i.test(reg);
+  $("modBox").hidden=reg!=="Simples Nacional";
+  const hint=$("regHint"), naoOpt=/não optante/i.test($("t_simples").value);
+  let msg="";
+  if(!reg) msg=naoOpt?"Empresa do regime normal: informe se é Lucro Presumido, Lucro Real Trimestral ou Lucro Real Anual.":"Informe a opção tributária da empresa.";
+  else if(reg==="Simples Nacional"&&!$("t_modalidade").value) msg="Informe se a empresa do Simples é Puro (IBS/CBS no DAS) ou Híbrido (IBS/CBS pelo regime regular).";
+  hint.hidden=!msg; hint.textContent=msg;
   const cur=anexosAtuais(), auto=anexosAuto();
   $("anexosSrc").textContent=S.anexosManual?"· marcados manualmente":(auto.length?"· sugeridos pelos CNAEs":"");
   $("anexos").innerHTML=["I","II","III","IV","V"].map(a=>'<label class="chip '+(cur.includes(a)?"on":"")+'"><input type="checkbox" data-anx="'+a+'" '+(cur.includes(a)?"checked":"")+'>Anexo '+a+'</label>').join("")+
@@ -712,6 +727,10 @@ function renderDeps(){
   if($("contatos").children.length||S.contatos.length) renderContatos();
   box.querySelectorAll("[data-resp]").forEach(inp=>inp.oninput=()=>{S.deps[+inp.dataset.resp].resp=inp.value;changed()});
   box.querySelectorAll("[data-depdel]").forEach(b=>b.onclick=()=>{S.deps.splice(+b.dataset.depdel,1);renderDeps();changed()});
+}
+function renderFerramentas(){
+  $("ferramentas").innerHTML=FERRAMENTAS.map(f=>'<label class="chip '+(S.ferramentas.includes(f)?"on":"")+'"><input type="checkbox" data-fer="'+esc(f)+'" '+(S.ferramentas.includes(f)?"checked":"")+'>'+esc(f)+'</label>').join("");
+  $("ferramentas").querySelectorAll("[data-fer]").forEach(cb=>cb.onchange=()=>{const f=cb.dataset.fer;S.ferramentas=cb.checked?[...new Set([...S.ferramentas,f])]:S.ferramentas.filter(x=>x!==f);S.ferramentas.sort((a,b)=>FERRAMENTAS.indexOf(a)-FERRAMENTAS.indexOf(b));renderFerramentas();changed()});
 }
 function renderEmissao(){
   $("emissao").innerHTML=EMISSOES.map(e=>'<label class="chip '+(S.emissao.includes(e)?"on":"")+'"><input type="checkbox" data-em="'+esc(e)+'" '+(S.emissao.includes(e)?"checked":"")+'>'+esc(e)+'</label>').join("");
@@ -769,7 +788,7 @@ function renderNumero(){
   if(S.docId){eb.hidden=false;eb.innerHTML='<span>Editando o memorando <b>Nº '+esc(numeroTxt(S.seq,S.ano))+'</b>'+(S.status==="cancelado"?' <span class="pill c">cancelado</span>':'')+(docAtual&&docAtual.situacaoCliente==="inativa"?' <span class="pill v">cliente saiu em '+esc(br(docAtual.dataSaida))+'</span>':'')+'. Salvar atualiza o arquivo; para trocar o número, altere o campo Número.</span>'}
   else eb.hidden=true;
 }
-function renderAll(){renderSocios();renderContatos();renderHist();renderLayouts();renderAtividades();renderServicos();renderTrib();renderDeps();renderEmissao();renderNumero();schedulePreview()}
+function renderAll(){renderFerramentas();renderSocios();renderContatos();renderHist();renderLayouts();renderAtividades();renderServicos();renderTrib();renderDeps();renderEmissao();renderNumero();schedulePreview()}
 
 let draftT=null;
 function changed(){schedulePreview();renderNumero();clearTimeout(draftT);draftT=setTimeout(()=>{const d=getForm();d._docId=S.docId;d._seq=S.seq;d._ano=S.ano;d._meta={criadoEm:S.criadoEm,criadoPor:S.criadoPor};lsSet("memo-draft",JSON.stringify(d))},600)}
@@ -803,8 +822,8 @@ function normalizar(j){
     else o.simples="Não informado na consulta";
     if(!o.regime&&Array.isArray(j.regime_tributario)&&j.regime_tributario.length){
       const ult=[...j.regime_tributario].sort((a,b)=>(+b.ano||0)-(+a.ano||0))[0]; const f=String(ult.forma_de_tributacao||"").toUpperCase();
-      if(f.includes("PRESUMIDO"))o.regime="Lucro Presumido"; else if(f.includes("REAL"))o.regime="Lucro Real Anual"; else if(f.includes("ARBITRADO"))o.regime="Lucro Arbitrado"; else if(f.includes("IMUNE")||f.includes("ISENT"))o.regime="Imune / Isenta";
-      if(o.regime)o.simples+=" · última declaração: "+(ult.forma_de_tributacao||"")+" ("+ult.ano+")";
+      if(f.includes("PRESUMIDO"))o.regime="Lucro Presumido"; else if(f.includes("REAL"))o.regimeDica="Lucro Real"; else if(f.includes("ARBITRADO"))o.regime="Lucro Arbitrado"; else if(f.includes("IMUNE")||f.includes("ISENT"))o.regime="Imune / Isenta";
+      if(o.regime||o.regimeDica)o.simples+=" · última declaração: "+(ult.forma_de_tributacao||"")+" ("+ult.ano+")";
     }
   } else if(j.nome!==undefined){ // ReceitaWS
     o.razao=j.nome||""; o.fantasia=j.fantasia||""; o.cnpj=fmtCnpj(j.cnpj); o.abertura=isoFromBr(j.abertura);
@@ -829,7 +848,8 @@ function aplicarConsulta(o){
   if(o.cnaes&&o.cnaes.length){S.atividades=o.cnaes.map(c=>({...c,on:true}));S.svOff={};S.anexosManual=null}
   renderAll();changed();
   const anx=anexosAtuais();
-  setStatus("ok","Dados carregados: "+(o.razao||"")+" · "+(o.cnaes||[]).length+" CNAE(s)"+(o.socios&&o.socios.length?" · "+o.socios.length+" sócio(s)":"")+(o.capital?" · capital "+o.capital:"")+(isSimples($("t_regime").value)&&anx.length?" · Anexos "+anx.join(", "):"")+". NIRE, IE e IM não vêm da Receita: preencha pelo cadastro da Junta Comercial e da SEFAZ/Prefeitura.");
+  if(MODO==="api") setTimeout(()=>buscarIE(true),50);
+  setStatus("ok","Dados carregados: "+(o.razao||"")+" · "+(o.cnaes||[]).length+" CNAE(s)"+(o.socios&&o.socios.length?" · "+o.socios.length+" sócio(s)":"")+(o.capital?" · capital "+o.capital:"")+(isSimples($("t_regime").value)&&anx.length?" · Anexos "+anx.join(", "):"")+(o.regimeDica?". Última declaração no Lucro Real: informe se é anual ou trimestral":"")+". "+(MODO==="api"?"A IE é consultada na SEFAZ em seguida. ":"")+"NIRE (JUCEES) e IM não vêm da Receita: preencha manualmente.");
   $("fallback").hidden=true;
 }
 function setStatus(cls,msg){const s=$("buscaStatus");s.className="status "+cls;s.textContent=msg}
@@ -873,6 +893,24 @@ async function buscarCNPJ(){
     setStatus("err",(ultimoErro?ultimoErro+" ":"")+"Use a consulta manual abaixo ou preencha os campos.");
     $("fallback").hidden=false;
   } finally { buscando=false; $("btnBuscar").disabled=false; }
+}
+
+/* ---------- inscrição estadual pela SEFAZ (só na versão hospedada) ---------- */
+let buscandoIE=false;
+async function buscarIE(auto){
+  if(MODO!=="api"||buscandoIE) return;
+  const c=dig($("e_cnpj").value||$("q_cnpj").value); if(c.length!==14){if(!auto)toast("Informe o CNPJ primeiro.");return}
+  const m=/\/([A-Z]{2})\b/.exec($("e_endereco").value||""); const uf=(m&&m[1])||"ES";
+  buscandoIE=true; $("ieInfo").textContent="Consultando a SEFAZ…";
+  try{
+    const r=await api("ie&cnpj="+c+"&uf="+uf);
+    const cads=r.cadastros||[];
+    if(!cads.length){$("ieInfo").textContent="SEFAZ: "+(r.cStat?r.cStat+" – ":"")+(r.xMotivo||"sem inscrição estadual encontrada");return}
+    const hab=cads.find(x=>x.situacao==="Habilitado")||cads[0];
+    if(!$("e_ie").value.trim()||!auto){$("e_ie").value=hab.ie;changed()}
+    $("ieInfo").textContent="SEFAZ: IE "+hab.ie+" · "+hab.situacao+(hab.regime?" · "+hab.regime:"")+(cads.length>1?" · "+cads.length+" inscrições":"");
+  }catch(e){$("ieInfo").textContent="SEFAZ: "+(e.message||"não foi possível consultar")}
+  finally{buscandoIE=false}
 }
 
 /* ---------- montagem do memorando (blocos) ---------- */
@@ -922,7 +960,7 @@ function blocosMemo(d){
     cts.forEach(c=>{const r=el("trow ct","<div><b>"+v(c.nome)+"</b>"+(c.cargo?"<div style='color:#4d5b6b'>"+esc(c.cargo)+"</div>":"")+"</div><div class='c'>"+v(c.telefone)+"</div><div style='overflow-wrap:anywhere'>"+v(c.email)+"</div><div>"+v((c.setores||[]).join(", "))+"</div>");r._head=h;B.push(r)});
   }
   B.push(sec("Tributação"));
-  B.push(kv("Opção tributária",(m.reg||"").toUpperCase()));
+  B.push(kv("Opção tributária",(m.reg||"").toUpperCase()+(m.reg==="Simples Nacional"&&d.t_modalidade?" – "+d.t_modalidade.toUpperCase():"")));
   if(isSimples(m.reg)){ B.push(kv("Situação no Simples",d.t_simples)); if(/simples/i.test(m.reg)) B.push(kv("Anexos do Simples",m.anx.length?m.anx.map(a=>"Anexo "+a).join(", ")+(m.fr?" · atividade sujeita ao fator r":""):"")); }
   const princ=m.atv.find(a=>a.tipo==="Principal");
   B.push(kv("CNAE principal",princ?fmtCnae(princ.cod)+" – "+(princ.desc||infoCnae(princ.cod).desc):""));
@@ -946,6 +984,7 @@ function blocosMemo(d){
   B.push(kv2(["Certificado digital",d.r_cert],["Domínio",d.r_dominio]));
   B.push(kv2(["Sintegra",d.r_sintegra],["SPED Contábil",d.r_spedc]));
   B.push(kv2(["SPED Fiscal",d.r_spedf],["Fará a emissão",(d.emissao||[]).join(", ")]));
+  B.push(kv("Ferramentas configuradas",(d.ferramentas||[]).join(", ")));
   B.push(kv2(["Login NFS-e",d.r_loginNfse],["Senha NFS-e",d.r_senhaNfse]));
   B.push(kv2(["Cód. acesso Simples",d.r_codSimples],["Senha SEFAZ-ES AGV",d.r_sefaz]));
   B.push(kv2(["CPF ADM",d.r_cpfAdm],["PIS",d.r_pis]));
@@ -1068,7 +1107,7 @@ async function gerarDOCX(d){
   const ctsW=contatosDe(d).filter(c=>(c.nome||c.telefone||c.email||"").trim());
   if(ctsW.length){b+=wsec("Contatos da empresa");b+=wtable(["Nome","Cargo","Telefone","E-mail","Setores"],ctsW.map(c=>[c.nome||"—",c.cargo||"—",c.telefone||"—",c.email||"—",(c.setores||[]).join(", ")||"—"]),[1900,1300,1500,W-1900-1300-1500-1700,1700])}
   b+=wsec("Tributação");
-  b+=wkv("Opção tributária",(m.reg||"").toUpperCase());
+  b+=wkv("Opção tributária",(m.reg||"").toUpperCase()+(m.reg==="Simples Nacional"&&d.t_modalidade?" – "+d.t_modalidade.toUpperCase():""));
   if(isSimples(m.reg)){b+=wkv("Situação no Simples",d.t_simples); if(/simples/i.test(m.reg)) b+=wkv("Anexos do Simples",m.anx.map(a=>"Anexo "+a).join(", ")+(m.fr?" · atividade sujeita ao fator r":""))}
   const princ=m.atv.find(a=>a.tipo==="Principal");
   b+=wkv("CNAE principal",princ?fmtCnae(princ.cod)+" – "+(princ.desc||infoCnae(princ.cod).desc):"");
@@ -1081,7 +1120,7 @@ async function gerarDOCX(d){
   const deps=(d.deps||[]).filter(x=>x.on);
   b+=deps.length?wtable(["Departamento","Responsável pela empresa"],deps.map(x=>[x.nome,x.resp||"—"]),[2900,W-2900]):wp(wr("Nenhum setor marcado.",{i:true}));
   b+=wsec("Rotinas, acessos e obrigações");
-  [["Pró-labore",d.r_prolabore],["Folha de pagamento",d.r_folha],["Certificado digital",d.r_cert],["Domínio",d.r_dominio],["Sintegra",d.r_sintegra],["SPED Contábil",d.r_spedc],["SPED Fiscal",d.r_spedf],["Fará a emissão",(d.emissao||[]).join(", ")],["Login NFS-e",d.r_loginNfse],["Senha NFS-e",d.r_senhaNfse],["Código de acesso do Simples",d.r_codSimples],["Senha SEFAZ-ES AGV",d.r_sefaz],["CPF ADM",d.r_cpfAdm],["PIS",d.r_pis],["Os documentos da empresa se encontram digitalizados em",d.r_docs]].forEach(x=>b+=wkv(x[0],x[1]));
+  [["Pró-labore",d.r_prolabore],["Folha de pagamento",d.r_folha],["Certificado digital",d.r_cert],["Domínio",d.r_dominio],["Sintegra",d.r_sintegra],["SPED Contábil",d.r_spedc],["SPED Fiscal",d.r_spedf],["Fará a emissão",(d.emissao||[]).join(", ")],["Ferramentas configuradas",(d.ferramentas||[]).join(", ")],["Login NFS-e",d.r_loginNfse],["Senha NFS-e",d.r_senhaNfse],["Código de acesso do Simples",d.r_codSimples],["Senha SEFAZ-ES AGV",d.r_sefaz],["CPF ADM",d.r_cpfAdm],["PIS",d.r_pis],["Os documentos da empresa se encontram digitalizados em",d.r_docs]].forEach(x=>b+=wkv(x[0],x[1]));
   const obs=String(d.obs||"").split(/\n\s*\n|\n/).map(s=>s.trim()).filter(Boolean);
   if(obs.length){b+=wsec("Observações");obs.forEach(p=>b+=wp(wr(p),{after:80,jc:"both"}))}
   const NS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
@@ -1103,7 +1142,7 @@ async function gerarDOCX(d){
 }
 
 /* ---------- histórico ---------- */
-const LABELS={m_data:"Data do memorando",m_assunto:"Assunto",layout:"Layout",e_razao:"Razão social",e_fantasia:"Nome fantasia",e_cnpj:"CNPJ",e_abertura:"Data de abertura",e_desde:"Cliente desde",e_situacao:"Situação cadastral",e_natureza:"Natureza jurídica",e_capital:"Capital social",e_nire:"NIRE",e_ie:"Inscrição estadual",e_im:"Inscrição municipal",e_endereco:"Endereço",e_tel:"Telefone da empresa",e_email:"E-mail da empresa",contatos:"Contatos",socios:"Quadro societário",t_regime:"Opção tributária",t_simples:"Situação no Simples",anexosManual:"Anexos do Simples",atividades:"Atividades (CNAEs)",svOff:"Códigos de serviço",svExtra:"Códigos de serviço",deps:"Departamentos e responsáveis",r_prolabore:"Pró-labore",r_folha:"Folha de pagamento",r_cert:"Certificado digital",r_dominio:"Domínio",r_sintegra:"Sintegra",r_spedc:"SPED Contábil",r_spedf:"SPED Fiscal",emissao:"Emissão de notas",r_loginNfse:"Login NFS-e",r_senhaNfse:"Senha NFS-e",r_codSimples:"Código de acesso do Simples",r_sefaz:"Senha SEFAZ-ES AGV",r_cpfAdm:"CPF ADM",r_pis:"PIS",r_docs:"Documentos digitalizados",obs:"Observações"};
+const LABELS={m_data:"Data do memorando",m_assunto:"Assunto",layout:"Layout",e_razao:"Razão social",e_fantasia:"Nome fantasia",e_cnpj:"CNPJ",e_abertura:"Data de abertura",e_desde:"Cliente desde",e_situacao:"Situação cadastral",e_natureza:"Natureza jurídica",e_capital:"Capital social",e_nire:"NIRE",e_ie:"Inscrição estadual",e_im:"Inscrição municipal",e_endereco:"Endereço",e_tel:"Telefone da empresa",e_email:"E-mail da empresa",contatos:"Contatos",socios:"Quadro societário",t_regime:"Opção tributária",t_modalidade:"Simples Puro/Híbrido",ferramentas:"Ferramentas configuradas",t_simples:"Situação no Simples",anexosManual:"Anexos do Simples",atividades:"Atividades (CNAEs)",svOff:"Códigos de serviço",svExtra:"Códigos de serviço",deps:"Departamentos e responsáveis",r_prolabore:"Pró-labore",r_folha:"Folha de pagamento",r_cert:"Certificado digital",r_dominio:"Domínio",r_sintegra:"Sintegra",r_spedc:"SPED Contábil",r_spedf:"SPED Fiscal",emissao:"Emissão de notas",r_loginNfse:"Login NFS-e",r_senhaNfse:"Senha NFS-e",r_codSimples:"Código de acesso do Simples",r_sefaz:"Senha SEFAZ-ES AGV",r_cpfAdm:"CPF ADM",r_pis:"PIS",r_docs:"Documentos digitalizados",obs:"Observações"};
 function normCampo(k,o){
   if(k==="contatos") return contatosDe(o||{}).filter(c=>(c.nome||c.cargo||c.telefone||c.email||"").trim()||(c.setores||[]).length);
   const v=(o||{})[k]; if(v==null||v==="") return ""; if(typeof v==="string") return v.trim(); if(k==="svOff"&&!Object.keys(v).length) return ""; return v;
@@ -1139,6 +1178,8 @@ async function salvar(){
   if(!DB){toast("O arquivo não está disponível nesta visualização.");return}
   const d=getForm();
   if(!d.e_razao.trim()||dig(d.e_cnpj).length!==14){toast("Preencha a razão social e o CNPJ antes de salvar.");return}
+  if(!d.t_regime){toast("Informe a opção tributária (Simples, Lucro Presumido, Lucro Real Trimestral ou Anual).");$("t_regime").focus();return}
+  if(d.t_regime==="Simples Nacional"&&!d.t_modalidade){toast("Informe se o Simples é Puro ou Híbrido.");$("t_modalidade").focus();return}
   const numTxt=$("m_numero").value.trim(), pm=parseNum(numTxt);
   if(numTxt&&!pm){toast("Número inválido. Use o formato 05/2026.");return}
   const btn=$("btnSalvar");btn.disabled=true;btn.textContent="Salvando…";
@@ -1219,6 +1260,8 @@ async function salvar(){
 async function salvarAPI(){
   const d=getForm();
   if(!d.e_razao.trim()||dig(d.e_cnpj).length!==14){toast("Preencha a razão social e o CNPJ antes de salvar.");return}
+  if(!d.t_regime){toast("Informe a opção tributária (Simples, Lucro Presumido, Lucro Real Trimestral ou Anual).");$("t_regime").focus();return}
+  if(d.t_regime==="Simples Nacional"&&!d.t_modalidade){toast("Informe se o Simples é Puro ou Híbrido.");$("t_modalidade").focus();return}
   const numTxt=$("m_numero").value.trim(), pm=parseNum(numTxt);
   if(numTxt&&!pm){toast("Número inválido. Use o formato 05/2026.");return}
   const btn=$("btnSalvar");btn.disabled=true;btn.textContent="Salvando…";
@@ -1416,7 +1459,8 @@ function renderPainel(){
   graficoAtivos($("chAtivos"),meses.map(m=>m.fim),mes,ano);
   const at=atFim.map(e=>e.d);
   $("psRegime").textContent=at.length+" empresas ativas em "+br(fimRef);
-  listaBarras($("blRegime"),contar(at.map(d=>d.t_regime||"Não informado")),"","Sem empresas ativas.");
+  listaBarras($("blRegime"),contar(at.map(d=>(d.t_regime||"Não informado")+(d.t_regime==="Simples Nacional"&&d.t_modalidade?" – "+d.t_modalidade:""))),"","Sem empresas ativas.");
+  listaBarras($("blFer"),contar(at.flatMap(d=>(d.ferramentas&&d.ferramentas.length)?d.ferramentas:["Nenhuma marcada"])),"","Sem empresas ativas.");
   listaBarras($("blSetor"),contar(at.flatMap(d=>(d.deps||[]).filter(x=>x.on).map(x=>x.nome))),"","Nenhum setor marcado nas empresas ativas.");
   listaBarras($("blAnexo"),contar(at.filter(d=>/simples/i.test(d.t_regime||"")).flatMap(d=>{const bak={a:S.atividades,m:S.anexosManual};S.atividades=d.atividades||[];S.anexosManual=d.anexosManual||null;const r=anexosAtuais();S.atividades=bak.a;S.anexosManual=bak.m;return (r.length?r:["Sem anexo"]).map(x=>x==="Sem anexo"?x:"Anexo "+x)})),"","Nenhuma empresa ativa no Simples Nacional.");
   $("psMotivo").textContent=sai.length?sai.length+" saída"+(sai.length>1?"s":"")+" em "+per:"Nenhuma saída em "+per;
@@ -1457,7 +1501,7 @@ function showView(vw){
 
 /* ---------- eventos ---------- */
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>showView(t.dataset.view));
-FIELD_IDS.forEach(id=>{$(id).addEventListener("input",()=>{if(id==="t_regime")renderTrib();changed()});$(id).addEventListener("change",()=>{if(id==="t_regime")renderTrib();changed()})});
+FIELD_IDS.forEach(id=>{const tr=["t_regime","t_modalidade","t_simples"].includes(id);$(id).addEventListener("input",()=>{if(tr)renderTrib();changed()});$(id).addEventListener("change",()=>{if(tr)renderTrib();changed()})});
 $("m_numero").addEventListener("input",changed);
 $("q_cnpj").addEventListener("input",e=>{const d=dig(e.target.value).slice(0,14);e.target.value=d.length===14?fmtCnpj(d):d});
 $("q_cnpj").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();buscarCNPJ()}});
@@ -1472,6 +1516,7 @@ $("btnAddCnae").onclick=()=>{const c=dig($("addCnae").value);if(c.length!==7){to
 $("btnAddSv").onclick=()=>{let it=$("addSv").value.trim();const dd=dig(it);if(dd.length===3||dd.length===4)it=pad(dd,4).slice(0,2)+"."+pad(dd,4).slice(2);
   if(!/^\d{2}\.\d{2}$/.test(it)){toast("Código no formato 00.00.");return}
   S.svExtra.push({item:it,desc:$("addSvDesc").value.trim()||LC116[it]||"",anexo:$("addSvAnx").value});$("addSv").value="";$("addSvDesc").value="";$("addSvAnx").value="";renderServicos();changed()};
+$("btnIE").onclick=()=>buscarIE(false);
 $("btnAddSocio").onclick=()=>{S.socios.push({nome:"",qualificacao:"",entrada:""});renderSocios();changed();setTimeout(()=>{const el=$("so_nome_"+(S.socios.length-1));if(el)el.focus()},30)};
 $("btnAddContato").onclick=()=>{S.contatos.push(contatoVazio());renderContatos();changed();const ix=S.contatos.length-1;setTimeout(()=>{const el=$("ct_nome_"+ix);if(el)el.focus()},30)};
 $("btnAddDep").onclick=()=>{const n=$("addDep").value.trim();if(!n)return;S.deps.push({nome:n,on:true,resp:""});$("addDep").value="";renderDeps();changed()};
@@ -1496,7 +1541,7 @@ $("btnApresentar").onclick=async()=>{const el=$("painelBody");try{if(el.requestF
 (async function caps(){
   const c=window.claude;
   if(!c||!c.use){
-    MODO="api";
+    MODO="api"; $("btnIE").hidden=false;
     $("loginForm").addEventListener("submit",async ev=>{ev.preventDefault();
       CRED={nome:$("lg_nome").value.trim(),senha:$("lg_senha").value};
       try{await api("listar");lsSet("memo-cred",JSON.stringify(CRED));$("login").hidden=true;document.body.classList.remove("locked");$("lg_senha").value="";await carregarAPI();toast("Bem-vinda(o), "+CRED.nome+".")}

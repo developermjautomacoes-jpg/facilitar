@@ -15,6 +15,13 @@ Formulário de memorando para clientes novos: consulta de CNPJ, regime tributár
 5. Em **Domains**, aponte o domínio para a porta `80`. O sistema responde tanto na raiz quanto em `/memorandos`.
 6. Clique em **Deploy**. Ative o **Auto Deploy** para publicar a cada push.
 
+### Consulta da inscrição estadual (SEFAZ)
+A IE é consultada no webservice oficial de cadastro (CadConsultaCadastro4, SVRS) com um certificado A1. Em **Environment** do Easypanel:
+- `CERT_PFX_BASE64` = conteúdo do arquivo `.pfx` em base64 (no Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\caminho\certificado.pfx")) | Set-Clipboard`)
+- `CERT_SENHA` = senha do certificado
+
+Se a SEFAZ responder "Rejeição 257 – solicitante não habilitado", use um e-CNPJ de empresa habilitada como emissora de NF-e no ES.
+
 ## Instalação em hospedagem compartilhada
 1. Publique o repositório na pasta do site (Git da Hostinger ou upload dos arquivos).
 2. No servidor, copie `config.exemplo.php` para `config.php` e defina `SENHA_ACESSO`.
