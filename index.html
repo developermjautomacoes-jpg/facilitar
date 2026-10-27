@@ -164,6 +164,21 @@ table.t tr.off td{opacity:.45}
 .saida .f{min-width:130px}
 .saida input,.saida select{padding:5px 8px;font-size:14px}
 
+/* Visualizar, atualização pelo CNPJ, ações da lista */
+#viewer{position:fixed;inset:0;z-index:150;background:rgba(10,20,32,.6);display:flex;justify-content:center;padding:16px max(16px,env(safe-area-inset-right,0px)) 16px max(16px,env(safe-area-inset-left,0px))}
+#viewer .vw{background:var(--surface);border-radius:10px;width:min(900px,100%);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+#viewer .vh{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
+#viewer .vh .t{flex:1;min-width:200px}
+#viewer .vh .t b{font:700 20px var(--f-display);color:var(--navy)}
+#viewer .vb{overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px;align-items:center;background:var(--bg)}
+.atu{border:1px solid var(--blue);border-radius:8px;background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.atu h3{margin:0;font:700 15px var(--f-display);text-transform:uppercase;letter-spacing:.8px;color:var(--navy)}
+.atu td.old{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line)}
+.atu td.new{font-weight:600}
+.mais{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;width:100%;padding-top:6px;border-top:1px dashed var(--line);margin-top:4px}
+.btn.danger{color:var(--bad);border-color:var(--line)}
+.btn.danger:hover{border-color:var(--bad)}
+
 /* Contatos e histórico */
 .contato{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--surface-2);display:flex;flex-direction:column;gap:10px}
 .contato .top{display:flex;justify-content:space-between;align-items:center;gap:10px}
@@ -247,6 +262,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
     <div class="grid">
       <div class="col">
         <div id="editBanner" class="edit-banner" hidden></div>
+        <div id="atuBox" class="atu" hidden></div>
 
         <section class="card">
           <h2><span class="n">1</span>Consulta do CNPJ</h2>
@@ -485,6 +501,11 @@ body.locked .wrap,body.locked .toast{display:none!important}
 </div>
 
 <div id="stage" aria-hidden="true" style="position:fixed;left:-20000px;top:0;width:794px"></div>
+<div id="viewer" hidden role="dialog" aria-modal="true" aria-labelledby="vwTitle"><div class="vw">
+  <div class="vh"><div class="t"><b id="vwTitle"></b><div class="small muted" id="vwSub"></div></div>
+    <button class="btn primary sm" id="vwEdit" type="button">Editar</button><button class="btn sm" id="vwPdf" type="button">PDF</button><button class="btn sm" id="vwDocx" type="button">Word</button><button class="btn sm" id="vwClose" type="button">Fechar</button></div>
+  <div class="vb" id="vwBody"></div>
+</div></div>
 <div id="overlay" hidden><div class="msg" id="overlayMsg">Gerando PDF…</div><div id="overlayStage"></div></div>
 <div id="toast" class="toast" hidden></div>
 <div id="login" hidden>
@@ -684,7 +705,7 @@ function contatosDe(d){
 function blankForm(){
   S.docId=null;S.seq=null;S.ano=null;S.status="ativo";S.criadoEm=null;S.criadoPor=null;S.original=null;
   setForm({m_data:hojeISO(),m_assunto:"ENTRADA DE EMPRESA EM NOSSO ESCRITÓRIO",e_desde:hojeISO(),obs:OBS_PADRAO,layout:S.layout||"1"});
-  $("q_cnpj").value="";$("buscaStatus").textContent="";$("fallback").hidden=true;
+  $("q_cnpj").value="";$("buscaStatus").textContent="";$("fallback").hidden=true;$("atuBox").hidden=true;
 }
 
 /* ---------- render do formulário ---------- */
@@ -806,7 +827,7 @@ function renderNumero(){
   hint.className=cls;hint.textContent=msg;
   const eb=$("editBanner");
   const docAtual=S.docId&&ARQ.find(x=>x._id===S.docId);
-  if(S.docId){eb.hidden=false;eb.innerHTML='<span>Editando o memorando <b>Nº '+esc(numeroTxt(S.seq,S.ano))+'</b>'+(S.status==="cancelado"?' <span class="pill c">cancelado</span>':'')+(docAtual&&docAtual.situacaoCliente==="inativa"?' <span class="pill v">cliente saiu em '+esc(br(docAtual.dataSaida))+'</span>':'')+'. Salvar atualiza o arquivo; para trocar o número, altere o campo Número.</span>'}
+  if(S.docId){eb.hidden=false;eb.innerHTML='<span>Editando o memorando <b>Nº '+esc(numeroTxt(S.seq,S.ano))+'</b>'+(S.status==="cancelado"?' <span class="pill c">cancelado</span>':'')+(docAtual&&docAtual.situacaoCliente==="inativa"?' <span class="pill v">cliente saiu em '+esc(br(docAtual.dataSaida))+'</span>':'')+'. Salvar atualiza o arquivo; para trocar o número, altere o campo Número.</span><button class="btn sm primary" id="btnAtualizar" type="button">Buscar atualização pelo CNPJ</button>'; $("btnAtualizar").onclick=buscarAtualizacao}
   else eb.hidden=true;
 }
 function renderAll(){renderFerramentas();renderSocios();renderContatos();renderHist();renderLayouts();renderAtividades();renderServicos();renderTrib();renderDeps();renderEmissao();renderNumero();schedulePreview()}
@@ -889,20 +910,23 @@ async function viaNavegador(url){
   return extrairJSON(txt);
 }
 let buscando=false;
-async function buscarCNPJ(){
-  const c=dig($("q_cnpj").value);
+let destinoConsulta=null;
+async function buscarCNPJ(onOk,cnpj){
+  if(typeof onOk!=="function") onOk=aplicarConsulta;
+  destinoConsulta=onOk;
+  const c=dig(cnpj||$("q_cnpj").value);
   if(c.length!==14){setStatus("err","Informe os 14 dígitos do CNPJ.");return}
   if(buscando)return; buscando=true; $("btnBuscar").disabled=true; linksFallback(c);
   setStatus("wait","Consultando a Receita…");
   const urls=["https://brasilapi.com.br/api/cnpj/v1/"+c,"https://receitaws.com.br/v1/cnpj/"+c];
   let ultimoErro="";
   try{
-    if(MODO==="api"){ try{ const j=await api("cnpj&cnpj="+c); aplicarConsulta(normalizar(j)); return }catch(e){ ultimoErro=e.message||"" } }
-    for(const u of urls){ try{ const j=await tentarFetch(u); aplicarConsulta(normalizar(j)); return }catch(e){ if(e&&e.message&&!/fetch|abort|network|Failed/i.test(e.message)) ultimoErro=e.message } }
+    if(MODO==="api"){ try{ const j=await api("cnpj&cnpj="+c); onOk(normalizar(j)); return }catch(e){ ultimoErro=e.message||"" } }
+    for(const u of urls){ try{ const j=await tentarFetch(u); onOk(normalizar(j)); return }catch(e){ if(e&&e.message&&!/fetch|abort|network|Failed/i.test(e.message)) ultimoErro=e.message } }
     if(MCP){
       setStatus("wait","Consultando pelo navegador do Claude…");
       for(const u of urls){
-        try{ const j=await viaNavegador(u); aplicarConsulta(normalizar(j)); return }
+        try{ const j=await viaNavegador(u); onOk(normalizar(j)); return }
         catch(e){
           const code=e&&e.code;
           if(code==="server_not_connected"||code==="not_in_manifest"||code==="not_granted"||code==="capability_disabled"||code==="blocked_by_policy"){ultimoErro="";break}
@@ -914,6 +938,56 @@ async function buscarCNPJ(){
     setStatus("err",(ultimoErro?ultimoErro+" ":"")+"Use a consulta manual abaixo ou preencha os campos.");
     $("fallback").hidden=false;
   } finally { buscando=false; $("btnBuscar").disabled=false; }
+}
+
+/* ---------- atualização de memorando pelo CNPJ ---------- */
+let ATU=[];
+function buscarAtualizacao(){
+  const c=dig($("e_cnpj").value);
+  if(c.length!==14){toast("O memorando não tem CNPJ válido.");return}
+  $("q_cnpj").value=fmtCnpj(c);
+  const box=$("atuBox");box.hidden=false;box.innerHTML='<h3>Atualização pela Receita</h3><div class="small muted">Consultando o CNPJ '+esc(fmtCnpj(c))+'…</div>';
+  box.scrollIntoView({block:"nearest"});
+  buscarCNPJ(mostrarAtualizacao,c).then(()=>{ if(box.innerHTML.includes("Consultando o CNPJ")){box.innerHTML='<h3>Atualização pela Receita</h3><div class="small" style="color:var(--bad)">'+esc($("buscaStatus").textContent||"Não foi possível consultar.")+'</div><div class="row"><button class="btn sm" type="button" id="atuFechar">Fechar</button></div>';$("atuFechar").onclick=()=>{$("atuBox").hidden=true}} });
+}
+function mostrarAtualizacao(o){
+  setStatus("ok","Consulta concluída. Confira as diferenças no quadro de atualização.");$("fallback").hidden=true;
+  const d=getForm(), L=[];
+  const txt=(k,lab,novo,fmt)=>{novo=(novo==null?"":String(novo)).trim();const atual=String(d[k]||"").trim();if(novo&&novo!==atual)L.push({k,lab,atual:fmt?fmt(atual):atual,novo:fmt?fmt(novo):novo,valor:novo})};
+  txt("e_razao","Razão social",o.razao);txt("e_fantasia","Nome fantasia",o.fantasia);txt("e_situacao","Situação cadastral",o.situacao);
+  txt("e_natureza","Natureza jurídica",o.natureza);txt("e_capital","Capital social",o.capital);txt("e_abertura","Data de abertura",o.abertura,br);
+  txt("e_endereco","Endereço",o.endereco);txt("e_tel","Telefone da empresa",o.tel);txt("e_email","E-mail da empresa",o.email);txt("t_simples","Situação no Simples",o.simples);
+  if(o.regime&&o.regime!==d.t_regime&&!(o.regime==="Simples Nacional"&&d.t_regime==="Simples Nacional")) L.push({k:"t_regime",lab:"Opção tributária",atual:d.t_regime,novo:o.regime,valor:o.regime});
+  const nomes=a=>(a||[]).map(x=>(x.nome||"").trim().toUpperCase()).filter(Boolean).sort().join(" | ");
+  if(o.socios&&o.socios.length&&nomes(o.socios)!==nomes(d.socios)) L.push({k:"socios",lab:"Quadro societário",atual:(d.socios||[]).map(x=>x.nome).join(", "),novo:o.socios.map(x=>x.nome).join(", "),valor:o.socios});
+  const cods=a=>(a||[]).map(x=>pad(dig(x.cod),7)).sort().join(",");
+  if(o.cnaes&&o.cnaes.length&&cods(o.cnaes)!==cods(d.atividades)){
+    const ant=new Set((d.atividades||[]).map(x=>pad(dig(x.cod),7))), nov=new Set(o.cnaes.map(x=>x.cod));
+    const add=o.cnaes.filter(x=>!ant.has(x.cod)).map(x=>fmtCnae(x.cod)), rem=(d.atividades||[]).filter(x=>!nov.has(pad(dig(x.cod),7))).map(x=>fmtCnae(x.cod));
+    L.push({k:"atividades",lab:"Atividades (CNAEs)",atual:rem.length?"Sai: "+rem.join(", "):"—",novo:add.length?"Entra: "+add.join(", "):"—",valor:o.cnaes});
+  }
+  ATU=L;
+  const box=$("atuBox");box.hidden=false;
+  if(!L.length){box.innerHTML='<h3>Atualização pela Receita</h3><div class="small" style="color:var(--ok)">Nenhuma diferença: os dados do memorando já estão iguais aos da Receita.</div><div class="row"><button class="btn sm" type="button" id="atuFechar">Fechar</button></div>';$("atuFechar").onclick=()=>{box.hidden=true};return}
+  box.innerHTML='<h3>Atualização pela Receita</h3><div class="small muted">'+L.length+' diferença'+(L.length>1?'s':'')+' encontrada'+(L.length>1?'s':'')+'. Marque o que deve ser atualizado.</div>'+
+    '<div class="tbl-wrap"><table class="t"><thead><tr><th></th><th>Campo</th><th>No memorando</th><th>Na Receita</th></tr></thead><tbody>'+
+    L.map((x,i)=>'<tr><td><input type="checkbox" checked data-atu="'+i+'" aria-label="Atualizar '+esc(x.lab)+'"></td><td><b>'+esc(x.lab)+'</b></td><td class="old">'+esc(x.atual||"—")+'</td><td class="new">'+esc(x.novo)+'</td></tr>').join("")+
+    '</tbody></table></div><div class="row"><button class="btn primary" type="button" id="atuSalvar">Aplicar e salvar alterações</button><button class="btn" type="button" id="atuAplicar">Só aplicar no formulário</button><button class="btn link" type="button" id="atuFechar">Descartar</button></div>';
+  $("atuFechar").onclick=()=>{box.hidden=true};
+  $("atuAplicar").onclick=()=>aplicarAtualizacao(false);
+  $("atuSalvar").onclick=()=>aplicarAtualizacao(true);
+}
+async function aplicarAtualizacao(salvarJa){
+  const marc=[...document.querySelectorAll("[data-atu]")].filter(c=>c.checked).map(c=>ATU[+c.dataset.atu]);
+  if(!marc.length){toast("Marque ao menos um item.");return}
+  marc.forEach(x=>{
+    if(x.k==="socios") S.socios=x.valor.map(v=>({...v}));
+    else if(x.k==="atividades"){const prev={};S.atividades.forEach(a=>prev[pad(dig(a.cod),7)]=a);S.atividades=x.valor.map(c=>({...c,on:prev[c.cod]?prev[c.cod].on:true}));S.anexosManual=null}
+    else $(x.k).value=x.valor;
+  });
+  renderAll();changed();$("atuBox").hidden=true;
+  if(salvarJa){ await salvar(); } else toast(marc.length+" item(ns) aplicado(s). Confira e clique em Salvar memorando.");
+  if(MODO==="api"&&CERTS.length) buscarIE(false);
 }
 
 /* ---------- inscrição estadual pela SEFAZ (só na versão hospedada) ---------- */
@@ -1012,13 +1086,13 @@ function blocosMemo(d){
   B.push(kv2(["Inscrição estadual",d.e_ie],["Inscrição municipal",d.e_im]));
   if(d.e_natureza)B.push(kv("Natureza jurídica",d.e_natureza));
   B.push(kv("Endereço",d.e_endereco));
+  B.push(kv2(["Telefone da empresa",d.e_tel],["E-mail da empresa",d.e_email]));
   const socs=(d.socios||[]).filter(x=>(x.nome||"").trim());
   if(socs.length){
     B.push(sec("Quadro societário",socs.length+" sócio"+(socs.length>1?"s":"")));
     const h=el("trow so h","<div>Nome</div><div>Qualificação</div><div>Entrada</div>");B.push(h);
     socs.forEach(x=>{const r=el("trow so","<div><b>"+v(x.nome)+"</b></div><div>"+v(x.qualificacao)+"</div><div class='c'>"+v(br(x.entrada))+"</div>");r._head=h;B.push(r)});
   }
-  B.push(kv2(["Telefone da empresa",d.e_tel],["E-mail da empresa",d.e_email]));
   const cts=contatosDe(d).filter(c=>(c.nome||c.telefone||c.email||"").trim());
   if(cts.length){
     B.push(sec("Contatos da empresa",cts.length+" contato"+(cts.length>1?"s":"")));
@@ -1211,7 +1285,16 @@ async function gerarDOCX(d){
 const LABELS={m_data:"Data do memorando",m_assunto:"Assunto",layout:"Layout",e_razao:"Razão social",e_fantasia:"Nome fantasia",e_cnpj:"CNPJ",e_abertura:"Data de abertura",e_desde:"Cliente desde",e_situacao:"Situação cadastral",e_natureza:"Natureza jurídica",e_capital:"Capital social",e_nire:"NIRE",e_ie:"Inscrição estadual",e_im:"Inscrição municipal",e_endereco:"Endereço",e_tel:"Telefone da empresa",e_email:"E-mail da empresa",contatos:"Contatos",socios:"Quadro societário",t_regime:"Opção tributária",t_modalidade:"Simples Puro/Híbrido",ferramentas:"Ferramentas configuradas",t_simples:"Situação no Simples",anexosManual:"Anexos do Simples",atividades:"Atividades (CNAEs)",svOff:"Códigos de serviço",svExtra:"Códigos de serviço",deps:"Departamentos e responsáveis",r_prolabore:"Pró-labore",r_folha:"Folha de pagamento",r_cert:"Certificado digital",r_dominio:"Domínio",r_sintegra:"Sintegra",r_spedc:"SPED Contábil",r_spedf:"SPED Fiscal",emissao:"Emissão de notas",r_loginNfse:"Login NFS-e",r_senhaNfse:"Senha NFS-e",r_codSimples:"Código de acesso do Simples",r_sefaz:"Senha SEFAZ-ES AGV",r_cpfAdm:"CPF ADM",r_pis:"PIS",r_docs:"Documentos digitalizados",obs:"Observações"};
 function normCampo(k,o){
   if(k==="contatos") return contatosDe(o||{}).filter(c=>(c.nome||c.cargo||c.telefone||c.email||"").trim()||(c.setores||[]).length);
-  const v=(o||{})[k]; if(v==null||v==="") return ""; if(typeof v==="string") return v.trim(); if(k==="svOff"&&!Object.keys(v).length) return ""; return v;
+  let v=(o||{})[k];
+  if(k==="layout") return String(v||"1");
+  if(k==="deps") v=(v||[]).filter(x=>x.on||(x.resp||"").trim()).map(x=>({nome:x.nome,on:!!x.on,resp:(x.resp||"").trim()}));
+  if(k==="atividades") v=(v||[]).map(x=>({cod:pad(dig(x.cod),7),on:x.on!==false}));
+  if(k==="socios") v=(v||[]).filter(x=>(x.nome||"").trim()).map(x=>({nome:(x.nome||"").trim(),qualificacao:(x.qualificacao||"").trim(),entrada:x.entrada||""}));
+  if(v==null||v==="") return "";
+  if(typeof v==="string") return v.trim();
+  if(Array.isArray(v)&&!v.length) return "";
+  if(typeof v==="object"&&!Array.isArray(v)&&!Object.keys(v).length) return "";
+  return v;
 }
 function alteracoes(antes,depois){
   if(!antes) return [];
@@ -1351,10 +1434,11 @@ function abrirDoc(id){
   const d=ARQ.find(x=>x._id===id);if(!d)return;
   S.docId=id;S.seq=d.seq;S.ano=d.ano;S.status=d.status||"ativo";S.criadoEm=d.criadoEm;S.criadoPor=d.criadoPor;
   S.original=JSON.parse(JSON.stringify(d));
+  $("atuBox").hidden=true;
   setForm(d);$("q_cnpj").value=d.e_cnpj||"";$("buscaStatus").textContent="";$("fallback").hidden=true;
   showView("novo");window.scrollTo({top:0});
 }
-let confirmando=null, saidaAberta=null;
+let confirmando=null, saidaAberta=null, maisAberto=null, excluindo=null;
 const MOTIVOS=["Encerramento da empresa","Mudou de escritório contábil","Inadimplência","Rescisão pelo escritório","Outro"];
 const ativo=d=>d.status!=="cancelado"&&d.situacaoCliente!=="inativa";
 const inativo=d=>d.status!=="cancelado"&&d.situacaoCliente==="inativa";
@@ -1387,10 +1471,12 @@ function renderLista(){
       '<div class="f"><label for="sd_mot">Motivo</label><select id="sd_mot">'+MOTIVOS.map(m=>'<option>'+esc(m)+'</option>').join("")+'</select></div>'+
       '<div class="f" style="flex:1"><label for="sd_obs">Observação</label><input type="text" id="sd_obs"></div>'+
       '<button class="btn sm primary" data-saidaok="'+d._id+'">Registrar saída</button><button class="btn sm link" data-saidano="1">Voltar</button></div>';
-    else acts='<button class="btn sm" data-open="'+d._id+'">Abrir</button><button class="btn sm" data-pdf="'+d._id+'">PDF</button><button class="btn sm" data-docx="'+d._id+'">Word</button>'+
+    else if(excluindo===d._id) acts='<span class="confirm">Excluir o Nº '+esc(numeroTxt(d.seq,d.ano))+'? O número fica livre para outro memorando. <button class="btn sm danger" data-delok="'+d._id+'">Excluir</button><button class="btn sm link" data-delno="1">Voltar</button></span>';
+    else acts='<button class="btn sm" data-ver="'+d._id+'">Visualizar</button><button class="btn sm" data-open="'+d._id+'">Editar</button><button class="btn sm danger" data-del="'+d._id+'">Excluir</button><button class="btn sm link" data-mais="'+d._id+'" aria-expanded="'+(maisAberto===d._id)+'">'+(maisAberto===d._id?"Menos ▴":"Mais ▾")+'</button>'+
+      (maisAberto===d._id?'<div class="mais"><button class="btn sm" data-pdf="'+d._id+'">Baixar PDF</button><button class="btn sm" data-docx="'+d._id+'">Baixar Word</button>'+
       (d.status==="cancelado"?'<button class="btn sm link" data-reativar="'+d._id+'">Reativar memorando</button>':
        inativo(d)?'<button class="btn sm link" data-volta="'+d._id+'">Cliente voltou</button>':
-       '<button class="btn sm link" data-saida="'+d._id+'">Registrar saída</button><button class="btn sm link" data-cancel="'+d._id+'">Cancelar</button>');
+       '<button class="btn sm link" data-saida="'+d._id+'">Registrar saída do cliente</button><button class="btn sm link" data-cancel="'+d._id+'">Cancelar memorando</button>')+'</div>':'');
     return '<div class="item'+(d.status==="cancelado"||inativo(d)?" cancel":"")+'"><div class="no">'+esc(numeroTxt(d.seq,d.ano))+'<small>'+esc(br(d.m_data))+'</small></div>'+
       '<div style="min-width:0"><div class="nm">'+esc(d.e_razao||"—")+(d.e_fantasia?' <span class="muted" style="font-weight:400">· '+esc(d.e_fantasia)+'</span>':'')+'</div>'+
       '<div class="meta"><span>'+esc(d.e_cnpj||"")+'</span>'+(d.t_regime?'<span class="pill a">'+esc(d.t_regime)+'</span>':'')+(d.status==="cancelado"?'<span class="pill c">memorando cancelado</span>':'')+
@@ -1398,6 +1484,11 @@ function renderLista(){
       (deps.length?'<span>'+esc(deps.map(x=>x.nome+(x.resp?": "+x.resp:"")).join(" · "))+'</span>':'')+(quem?'<span>'+esc(quem)+'</span>':'')+'</div></div>'+
       '<div class="acts">'+acts+'</div></div>'}).join("");
   box.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>abrirDoc(b.dataset.open));
+  box.querySelectorAll("[data-ver]").forEach(b=>b.onclick=()=>visualizar(b.dataset.ver));
+  box.querySelectorAll("[data-mais]").forEach(b=>b.onclick=()=>{maisAberto=maisAberto===b.dataset.mais?null:b.dataset.mais;renderLista()});
+  box.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{excluindo=b.dataset.del;confirmando=null;saidaAberta=null;renderLista()});
+  box.querySelectorAll("[data-delno]").forEach(b=>b.onclick=()=>{excluindo=null;renderLista()});
+  box.querySelectorAll("[data-delok]").forEach(b=>b.onclick=()=>excluirMemo(b.dataset.delok));
   box.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=()=>gerarPDF(ARQ.find(x=>x._id===b.dataset.pdf)));
   box.querySelectorAll("[data-docx]").forEach(b=>b.onclick=()=>gerarDOCX(ARQ.find(x=>x._id===b.dataset.docx)));
   box.querySelectorAll("[data-cancel]").forEach(b=>b.onclick=()=>{confirmando=b.dataset.cancel;saidaAberta=null;renderLista()});
@@ -1411,6 +1502,36 @@ function renderLista(){
     mudarCliente(b.dataset.saidaok,{situacaoCliente:"inativa",dataSaida:dt,motivoSaida:$("sd_mot").value,obsSaida:$("sd_obs").value.trim()},"Registrou a saída do cliente ("+br(dt)+" · "+$("sd_mot").value+")");
   });
   box.querySelectorAll("[data-volta]").forEach(b=>b.onclick=()=>mudarCliente(b.dataset.volta,{situacaoCliente:"ativa",dataSaida:"",motivoSaida:"",obsSaida:""},"Reativou o cliente"));
+}
+let vwId=null;
+function visualizar(id){
+  const d=ARQ.find(x=>x._id===id); if(!d) return; vwId=id;
+  $("vwTitle").textContent="Memorando Nº "+numeroTxt(d.seq,d.ano);
+  $("vwSub").textContent=(d.e_razao||"")+(d.e_cnpj?" · "+d.e_cnpj:"")+(d.status==="cancelado"?" · cancelado":inativo(d)?" · cliente saiu em "+br(d.dataSaida):"");
+  $("viewer").hidden=false; document.body.style.overflow="hidden";
+  const body=$("vwBody"); body.innerHTML="";
+  const pages=paginar(d,$("stage"));
+  const w=Math.min(794,body.clientWidth-32||760), z=w/794;
+  pages.forEach(p=>{const wrap=document.createElement("div");wrap.className="pv-page";wrap.style.width=(794*z)+"px";wrap.style.height=(1123*z)+"px";p.style.transformOrigin="0 0";p.style.transform="scale("+z+")";wrap.appendChild(p);body.appendChild(wrap)});
+  $("stage").innerHTML="";
+  const h=historicoDe(d);
+  if(h.length){const hb=document.createElement("div");hb.className="card";hb.style.width=(794*z)+"px";hb.innerHTML='<h2>Histórico</h2><ol class="hist">'+[...h].reverse().map(e=>'<li><span class="q">'+esc(dataHora(e.em))+'</span><div><b>'+esc(nomeDe(e)||"Sem nome")+'</b> '+esc((e.acao||"").charAt(0).toLowerCase()+(e.acao||"").slice(1))+(e.campos&&e.campos.length?'<div class="c">'+esc(e.campos.join(", "))+'</div>':'')+'</div></li>').join("")+'</ol>';body.appendChild(hb)}
+  $("vwClose").focus();
+}
+function fecharViewer(){$("viewer").hidden=true;document.body.style.overflow="";$("vwBody").innerHTML="";vwId=null}
+async function excluirMemo(id){
+  excluindo=null;
+  const d=ARQ.find(x=>x._id===id)||{};
+  try{
+    if(MODO==="api"){ await api("excluir",{id,usuario:quem()}); await carregarAPI(); }
+    else{
+      const agora=new Date().toISOString();
+      await DB.doc("lixeira/"+id+"-"+Date.now()).set({...d,_id:null,excluidoEm:agora,excluidoPor:MY_ID,excluidoPorNome:quem()});
+      await DB.doc("memorandos/"+id).delete();
+    }
+    if(S.docId===id){lsDel("memo-draft");blankForm()}
+    toast("Memorando Nº "+numeroTxt(d.seq,d.ano)+" excluído.");
+  }catch(e){toast("Não foi possível excluir: "+((e&&e.message)||(e&&e.code)||"erro"));renderLista()}
 }
 async function mudarCliente(id,patch,acao){
   saidaAberta=null;
@@ -1571,9 +1692,9 @@ FIELD_IDS.forEach(id=>{const tr=["t_regime","t_modalidade","t_simples"].includes
 $("m_numero").addEventListener("input",changed);
 $("q_cnpj").addEventListener("input",e=>{const d=dig(e.target.value).slice(0,14);e.target.value=d.length===14?fmtCnpj(d):d});
 $("q_cnpj").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();buscarCNPJ()}});
-$("btnBuscar").onclick=buscarCNPJ;
+$("btnBuscar").onclick=()=>buscarCNPJ(aplicarConsulta);
 $("btnColar").onclick=()=>{const c=dig($("q_cnpj").value);if(c.length===14)linksFallback(c);$("fallback").hidden=false;$("fbText").focus()};
-function aplicarColado(){try{aplicarConsulta(normalizar(extrairJSON($("fbText").value)));$("fbText").value=""}catch(e){setStatus("err",e.message||"Texto não reconhecido.")}}
+function aplicarColado(){try{(destinoConsulta||aplicarConsulta)(normalizar(extrairJSON($("fbText").value)));$("fbText").value=""}catch(e){setStatus("err",e.message||"Texto não reconhecido.")}}
 $("fbApply").onclick=aplicarColado;
 $("btnAddCnae").onclick=()=>{const c=dig($("addCnae").value);if(c.length!==7){toast("Informe o CNAE com 7 dígitos.");return}
   if(S.atividades.some(a=>a.cod===c)){toast("Esse CNAE já está na lista.");return}
@@ -1583,6 +1704,12 @@ $("btnAddSv").onclick=()=>{let it=$("addSv").value.trim();const dd=dig(it);if(dd
   if(!/^\d{2}\.\d{2}$/.test(it)){toast("Código no formato 00.00.");return}
   S.svExtra.push({item:it,desc:$("addSvDesc").value.trim()||LC116[it]||"",anexo:$("addSvAnx").value});$("addSv").value="";$("addSvDesc").value="";$("addSvAnx").value="";renderServicos();changed()};
 $("btnIE").onclick=()=>buscarIE(false);
+$("vwClose").onclick=fecharViewer;
+$("viewer").addEventListener("click",e=>{if(e.target.id==="viewer")fecharViewer()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("viewer").hidden)fecharViewer()});
+$("vwEdit").onclick=()=>{const id=vwId;fecharViewer();abrirDoc(id)};
+$("vwPdf").onclick=()=>{const d=ARQ.find(x=>x._id===vwId);if(d)gerarPDF(d)};
+$("vwDocx").onclick=()=>{const d=ARQ.find(x=>x._id===vwId);if(d)gerarDOCX(d)};
 $("btnCertImportar").onclick=importarCert;
 $("btnAddSocio").onclick=()=>{S.socios.push({nome:"",qualificacao:"",entrada:""});renderSocios();changed();setTimeout(()=>{const el=$("so_nome_"+(S.socios.length-1));if(el)el.focus()},30)};
 $("btnAddContato").onclick=()=>{S.contatos.push(contatoVazio());renderContatos();changed();const ix=S.contatos.length-1;setTimeout(()=>{const el=$("ct_nome_"+ix);if(el)el.focus()},30)};

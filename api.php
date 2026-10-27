@@ -353,6 +353,22 @@ if ($acao === 'status') {
     sai(200, ['ok' => true]);
 }
 
+if ($acao === 'excluir') {
+    $id = $in['id'] ?? '';
+    if (!idValido($id)) sai(400, ['erro' => 'Pedido inválido.']);
+    $f = arq($memDir, $id);
+    $m = ler($f);
+    if (!$m) sai(404, ['erro' => 'Memorando não encontrado.']);
+    // guarda uma cópia na lixeira (fora do arquivo ativo) antes de excluir; o número fica livre
+    $lix = $base . '/lixeira';
+    if (!is_dir($lix)) mkdir($lix, 0755, true);
+    $m['excluidoEm'] = date('c');
+    $m['excluidoPorNome'] = mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80);
+    if (!grava($lix . '/' . $id . '-' . date('Ymd-His') . '.json', $m)) sai(500, ['erro' => 'Não foi possível guardar a cópia na lixeira.']);
+    if (!@unlink($f)) sai(500, ['erro' => 'Não foi possível excluir o memorando.']);
+    sai(200, ['ok' => true]);
+}
+
 if ($acao === 'cliente') {
     $id = $in['id'] ?? ''; $sit = $in['situacaoCliente'] ?? '';
     if (!idValido($id) || !in_array($sit, ['ativa', 'inativa'], true)) sai(400, ['erro' => 'Pedido inválido.']);
