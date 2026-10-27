@@ -1,0 +1,3 @@
+# dados dos memorandos e senha ficam só no servidor
+dados/
+config.php
