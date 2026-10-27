@@ -1268,7 +1268,7 @@ async function salvar(){
       const camp=alteracoes(S.original||anterior,d);
       const hist=historicoDe(anterior).slice(-300);
       if(novo) hist.push({acao:"Renumerou de "+numeroTxt(S.seq,S.ano)+" para "+numeroTxt(seq,ano),campos:camp,por:quem(),porId:MY_ID,em:agora});
-      else if(camp.length) hist.push({acao:"Alterou",campos:camp,por:quem(),porId:MY_ID,em:agora});
+      else if(camp.length) hist.push({acao:atualizandoCadastro?"Atualizou o cadastro (consulta CNPJ/IE)":"Alterou",campos:camp,por:quem(),porId:MY_ID,em:agora});
       const body={...d,seq,ano,m_numero:numeroTxt(seq,ano),status:S.status,criadoEm:S.criadoEm,criadoPor:S.criadoPor,criadoPorNome:anterior.criadoPorNome||"",historico:hist,atualizadoEm:agora,atualizadoPor:MY_ID,atualizadoPorNome:quem(),busca:"",
         situacaoCliente:anterior.situacaoCliente||"ativa",dataSaida:anterior.dataSaida||"",motivoSaida:anterior.motivoSaida||"",obsSaida:anterior.obsSaida||""};
       body.busca=textoBusca(body);
@@ -1315,7 +1315,7 @@ async function salvar(){
       toast("Memorando Nº "+numeroTxt(seq,ano)+" salvo no arquivo.");
     }
     S.original=JSON.parse(JSON.stringify(getForm()));
-    lsDel("memo-draft");renderNumero();schedulePreview();
+    lsDel("memo-draft");atualizandoCadastro=false;renderNumero();schedulePreview();
   }catch(e){
     console.error(e);
     if(e&&e.code==="invalid_argument")toast("Você não tem permissão para gravar no arquivo.");
@@ -1336,25 +1336,48 @@ async function salvarAPI(){
     if(!S.docId) memo.criadoPorNome=(CRED&&CRED.nome)||"";
     delete memo._id;
     const antigo=S.docId?numeroTxt(S.seq,S.ano):null;
-    const j=await api("salvar",{id:S.docId,numero:pm?{seq:pm.seq,ano:pm.ano}:null,anoAuto:+((d.m_data||hojeISO()).slice(0,4)),usuario:quem(),alteracoes:alteracoes(S.original||(S.docId&&ARQ.find(x=>x._id===S.docId)),d),memo});
+    const j=await api("salvar",{id:S.docId,numero:pm?{seq:pm.seq,ano:pm.ano}:null,anoAuto:+((d.m_data||hojeISO()).slice(0,4)),usuario:quem(),alteracoes:alteracoes(S.original||(S.docId&&ARQ.find(x=>x._id===S.docId)),d),acaoAlterou:atualizandoCadastro?"Atualizou o cadastro (consulta CNPJ/IE)":"Alterou",memo});
     const m=j.memo;
     S.docId=m._id;S.seq=m.seq;S.ano=m.ano;S.status=m.status||"ativo";S.criadoEm=m.criadoEm;
     $("m_numero").value=numeroTxt(m.seq,m.ano);
     const novo=numeroTxt(m.seq,m.ano);
     toast(antigo&&antigo!==novo?"Memorando renumerado de "+antigo+" para "+novo+".":antigo?"Memorando Nº "+novo+" atualizado.":"Memorando Nº "+novo+" salvo no arquivo.");
     S.original=JSON.parse(JSON.stringify(getForm()));
-    lsDel("memo-draft");await carregarAPI();renderHist();schedulePreview();
+    lsDel("memo-draft");atualizandoCadastro=false;await carregarAPI();renderHist();schedulePreview();
   }catch(e){toast(e.message||"Erro ao salvar.")}
   finally{btn.disabled=false;btn.textContent="Salvar memorando"}
 }
 function abrirDoc(id){
   const d=ARQ.find(x=>x._id===id);if(!d)return;
+  atualizandoCadastro=false;
   S.docId=id;S.seq=d.seq;S.ano=d.ano;S.status=d.status||"ativo";S.criadoEm=d.criadoEm;S.criadoPor=d.criadoPor;
   S.original=JSON.parse(JSON.stringify(d));
   setForm(d);$("q_cnpj").value=d.e_cnpj||"";$("buscaStatus").textContent="";$("fallback").hidden=true;
   showView("novo");window.scrollTo({top:0});
 }
-let confirmando=null, saidaAberta=null;
+let atualizandoCadastro=false;
+async function atualizarCadastro(id){
+  abrirDoc(id);
+  atualizandoCadastro=true;
+  toast("Consultando CNPJ"+(MODO==="api"?"/SEFAZ":"")+" para atualizar o cadastro. A NIRE continua manual (link da JUCEES, ao lado do campo). Revise os dados e clique em Salvar memorando para registrar a atualização no histórico.");
+  await buscarCNPJ();
+}
+async function excluirMemo(id){
+  excluindo=null;
+  const d=ARQ.find(x=>x._id===id);
+  try{
+    if(MODO==="api"){ await api("excluir",{id,usuario:quem()}); if(S.docId===id)S.docId=null; await carregarAPI(); }
+    else{
+      if(!DB){toast("O arquivo não está disponível nesta visualização.");return}
+      await DB.doc("memorandos/"+id).delete();
+      ARQ=ARQ.filter(x=>x._id!==id);
+      if(S.docId===id)S.docId=null;
+      renderLista();
+    }
+    toast("Memorando "+(d?numeroTxt(d.seq,d.ano)+" ":"")+"excluído definitivamente.");
+  }catch(e){toast("Não foi possível excluir: "+((e&&e.message)||(e&&e.code)||"erro"));renderLista()}
+}
+let confirmando=null, saidaAberta=null, excluindo=null;
 const MOTIVOS=["Encerramento da empresa","Mudou de escritório contábil","Inadimplência","Rescisão pelo escritório","Outro"];
 const ativo=d=>d.status!=="cancelado"&&d.situacaoCliente!=="inativa";
 const inativo=d=>d.status!=="cancelado"&&d.situacaoCliente==="inativa";
@@ -1383,14 +1406,16 @@ function renderLista(){
     const quem=(h0?"criado por "+(nomeDe(h0)||"—")+" em "+dataHora(h0.em).slice(0,10):"")+(hl&&hl!==h0?" · última alteração: "+(nomeDe(hl)||"—")+" em "+dataHora(hl.em):"");
     let acts;
     if(confirmando===d._id) acts='<span class="confirm">Cancelar o Nº '+esc(numeroTxt(d.seq,d.ano))+'? <button class="btn sm" data-cancelok="'+d._id+'">Confirmar</button><button class="btn sm link" data-cancelno="1">Voltar</button></span>';
+    else if(excluindo===d._id) acts='<span class="confirm">Excluir definitivamente o Nº '+esc(numeroTxt(d.seq,d.ano))+'? Essa ação não pode ser desfeita. <button class="btn sm" style="background:var(--bad);border-color:var(--bad);color:#fff" data-delok="'+d._id+'">Excluir definitivamente</button><button class="btn sm link" data-delno="1">Voltar</button></span>';
     else if(saidaAberta===d._id) acts='<div class="saida"><div class="f"><label for="sd_data">Data da saída</label><input type="date" id="sd_data" value="'+hojeISO()+'"></div>'+
       '<div class="f"><label for="sd_mot">Motivo</label><select id="sd_mot">'+MOTIVOS.map(m=>'<option>'+esc(m)+'</option>').join("")+'</select></div>'+
       '<div class="f" style="flex:1"><label for="sd_obs">Observação</label><input type="text" id="sd_obs"></div>'+
       '<button class="btn sm primary" data-saidaok="'+d._id+'">Registrar saída</button><button class="btn sm link" data-saidano="1">Voltar</button></div>';
-    else acts='<button class="btn sm" data-open="'+d._id+'">Abrir</button><button class="btn sm" data-pdf="'+d._id+'">PDF</button><button class="btn sm" data-docx="'+d._id+'">Word</button>'+
+    else acts='<button class="btn sm" data-open="'+d._id+'">Abrir</button><button class="btn sm" data-upd="'+d._id+'">Atualizar cadastro</button><button class="btn sm" data-pdf="'+d._id+'">PDF</button><button class="btn sm" data-docx="'+d._id+'">Word</button>'+
       (d.status==="cancelado"?'<button class="btn sm link" data-reativar="'+d._id+'">Reativar memorando</button>':
        inativo(d)?'<button class="btn sm link" data-volta="'+d._id+'">Cliente voltou</button>':
-       '<button class="btn sm link" data-saida="'+d._id+'">Registrar saída</button><button class="btn sm link" data-cancel="'+d._id+'">Cancelar</button>');
+       '<button class="btn sm link" data-saida="'+d._id+'">Registrar saída</button><button class="btn sm link" data-cancel="'+d._id+'">Cancelar</button>')+
+      '<button class="btn sm link" style="color:var(--bad)" data-del="'+d._id+'">Excluir</button>';
     return '<div class="item'+(d.status==="cancelado"||inativo(d)?" cancel":"")+'"><div class="no">'+esc(numeroTxt(d.seq,d.ano))+'<small>'+esc(br(d.m_data))+'</small></div>'+
       '<div style="min-width:0"><div class="nm">'+esc(d.e_razao||"—")+(d.e_fantasia?' <span class="muted" style="font-weight:400">· '+esc(d.e_fantasia)+'</span>':'')+'</div>'+
       '<div class="meta"><span>'+esc(d.e_cnpj||"")+'</span>'+(d.t_regime?'<span class="pill a">'+esc(d.t_regime)+'</span>':'')+(d.status==="cancelado"?'<span class="pill c">memorando cancelado</span>':'')+
@@ -1398,13 +1423,17 @@ function renderLista(){
       (deps.length?'<span>'+esc(deps.map(x=>x.nome+(x.resp?": "+x.resp:"")).join(" · "))+'</span>':'')+(quem?'<span>'+esc(quem)+'</span>':'')+'</div></div>'+
       '<div class="acts">'+acts+'</div></div>'}).join("");
   box.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>abrirDoc(b.dataset.open));
+  box.querySelectorAll("[data-upd]").forEach(b=>b.onclick=()=>atualizarCadastro(b.dataset.upd));
   box.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=()=>gerarPDF(ARQ.find(x=>x._id===b.dataset.pdf)));
   box.querySelectorAll("[data-docx]").forEach(b=>b.onclick=()=>gerarDOCX(ARQ.find(x=>x._id===b.dataset.docx)));
-  box.querySelectorAll("[data-cancel]").forEach(b=>b.onclick=()=>{confirmando=b.dataset.cancel;saidaAberta=null;renderLista()});
+  box.querySelectorAll("[data-cancel]").forEach(b=>b.onclick=()=>{confirmando=b.dataset.cancel;excluindo=null;saidaAberta=null;renderLista()});
   box.querySelectorAll("[data-cancelno]").forEach(b=>b.onclick=()=>{confirmando=null;renderLista()});
   box.querySelectorAll("[data-cancelok]").forEach(b=>b.onclick=()=>mudarStatus(b.dataset.cancelok,"cancelado"));
+  box.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{excluindo=b.dataset.del;confirmando=null;saidaAberta=null;renderLista()});
+  box.querySelectorAll("[data-delno]").forEach(b=>b.onclick=()=>{excluindo=null;renderLista()});
+  box.querySelectorAll("[data-delok]").forEach(b=>b.onclick=()=>excluirMemo(b.dataset.delok));
   box.querySelectorAll("[data-reativar]").forEach(b=>b.onclick=()=>mudarStatus(b.dataset.reativar,"ativo"));
-  box.querySelectorAll("[data-saida]").forEach(b=>b.onclick=()=>{saidaAberta=b.dataset.saida;confirmando=null;renderLista()});
+  box.querySelectorAll("[data-saida]").forEach(b=>b.onclick=()=>{saidaAberta=b.dataset.saida;confirmando=null;excluindo=null;renderLista()});
   box.querySelectorAll("[data-saidano]").forEach(b=>b.onclick=()=>{saidaAberta=null;renderLista()});
   box.querySelectorAll("[data-saidaok]").forEach(b=>b.onclick=()=>{
     const dt=$("sd_data").value; if(!dt){toast("Informe a data da saída.");return}
@@ -1592,7 +1621,7 @@ $("btnPdf").onclick=()=>gerarPDF(getForm());
 $("btnDocx").onclick=()=>gerarDOCX(getForm());
 $("btnNovo").onclick=()=>{$("confirmNovo").hidden=false;$("btnNovo").hidden=true};
 $("novoNao").onclick=()=>{$("confirmNovo").hidden=true;$("btnNovo").hidden=false};
-$("novoSim").onclick=()=>{$("confirmNovo").hidden=true;$("btnNovo").hidden=false;lsDel("memo-draft");blankForm()};
+$("novoSim").onclick=()=>{$("confirmNovo").hidden=true;$("btnNovo").hidden=false;lsDel("memo-draft");atualizandoCadastro=false;blankForm()};
 ["s_q","s_ano","s_st"].forEach(id=>$(id).addEventListener("input",renderLista));
 ["p_ano","p_mes"].forEach(id=>$(id).addEventListener("change",renderPainel));
 $("btnPainelPdf").onclick=painelPdf;

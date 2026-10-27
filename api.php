@@ -287,6 +287,9 @@ if ($acao === 'salvar') {
     $usuario = mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80);
     $alts = [];
     foreach ((array)($in['alteracoes'] ?? []) as $a) { if (is_string($a) && count($alts) < 60) $alts[] = mb_substr($a, 0, 80); }
+    $acaoAlterou = trim((string)($in['acaoAlterou'] ?? ''));
+    if ($acaoAlterou === '') $acaoAlterou = 'Alterou';
+    $acaoAlterou = mb_substr($acaoAlterou, 0, 80);
 
     if ($id) {
         if (!idValido($id) || !file_exists(arq($memDir, $id))) sai(404, ['erro' => 'Memorando não encontrado no arquivo.']);
@@ -325,7 +328,7 @@ if ($acao === 'salvar') {
         if ($antigoSeq !== $seq || $antigoAno !== $ano) {
             $hist[] = ['acao' => 'Renumerou de ' . numTxt($antigoSeq, $antigoAno) . ' para ' . numTxt($seq, $ano), 'campos' => $alts, 'por' => $usuario, 'em' => $agora];
         } elseif ($alts) {
-            $hist[] = ['acao' => 'Alterou', 'campos' => $alts, 'por' => $usuario, 'em' => $agora];
+            $hist[] = ['acao' => $acaoAlterou, 'campos' => $alts, 'por' => $usuario, 'em' => $agora];
         }
     }
     $memo['historico'] = array_slice($hist, -300);
@@ -377,6 +380,15 @@ if ($acao === 'cliente') {
     $m['historico'] = array_slice($hist, -300);
     $m['atualizadoEm'] = $agora;
     if (!grava($f, $m)) sai(500, ['erro' => 'Não foi possível gravar.']);
+    sai(200, ['ok' => true]);
+}
+
+if ($acao === 'excluir') {
+    $id = $in['id'] ?? '';
+    if (!idValido($id)) sai(400, ['erro' => 'Pedido inválido.']);
+    $f = arq($memDir, $id);
+    if (!file_exists($f)) sai(404, ['erro' => 'Memorando não encontrado.']);
+    if (!@unlink($f)) sai(500, ['erro' => 'Não foi possível excluir o memorando no servidor.']);
     sai(200, ['ok' => true]);
 }
 
