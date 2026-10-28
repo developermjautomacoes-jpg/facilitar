@@ -1151,7 +1151,7 @@ function dadosMemo(d){
 const TAB_COLS={so:[.5,.36,.14],ct:[.29,.17,.31,.23],at:[.12,.6,.1,.18],sv:[.1,.75,.15],dp:[.32,.68]};
 function modeloMemo(d){
   const m=dadosMemo(d), I=[], val=x=>{x=(x==null?"":String(x)).trim();return x||"—"};
-  I.push({t:"head",num:"Nº "+numeroTxt(m.seq,m.ano),cancel:d.status==="cancelado",data:"Em "+(extenso(d.m_data)||""),setores:listaSetores(d.deps||[]),assunto:val(d.m_assunto)});
+  I.push({t:"head",num:"Nº "+numeroTxt(m.seq,m.ano),cancel:d.status==="cancelado",data:"Em "+(extenso(d.m_data)||""),setores:listaSetores(d.deps||[]),setoresOn:(d.deps||[]).some(x=>x.on),saud:(d.deps||[]).filter(x=>x.on).length===1?"Ao setor":"Aos setores",assunto:val(d.m_assunto)});
   I.push({t:"sec",title:"Dados da empresa"});
   I.push({t:"kv",l:"Nome",v:val(d.e_razao)});I.push({t:"kv",l:"Nome fantasia",v:val(d.e_fantasia)});
   I.push({t:"kv2",a:["CNPJ",val(d.e_cnpj)],b:["Abertura",val(br(d.e_abertura))]});
@@ -1199,7 +1199,7 @@ function blocosMemo(d){
   modeloMemo(d).forEach(it=>{
     if(it.t==="head") B.push(el("m-head",'<div class="m-kicker">Memorando</div><div class="m-num">'+esc(it.num)+(it.cancel?' <span style="font-size:14px;color:#A63A32">CANCELADO</span>':'')+'</div>'+
       '<div class="m-date">'+esc(it.data)+'</div><div class="m-rule"></div>'+
-      '<p class="m-to">Aos setores.</p><p class="m-subj">Assunto: <b>'+esc(it.assunto)+'</b></p>'));
+      '<p class="m-to">'+esc(it.saud)+(it.setoresOn?' <b>'+esc(it.setores)+'</b>':'')+'.</p><p class="m-subj">Assunto: <b>'+esc(it.assunto)+'</b></p>'));
     else if(it.t==="sec") B.push(sec(it.title,it.extra));
     else if(it.t==="kv") B.push(kv(it.l,it.v));
     else if(it.t==="kv2") B.push(kv2(it.a,it.b));
@@ -1247,7 +1247,7 @@ function memoParaPdf(d,pdf){
       y+=22.5*PT*1.12;
       font("bold",9.8,BLUE);pdf.text(txtPdf(it.data),X,y+9.8*PT);y+=lh(9.8)+2;
       pdf.setDrawColor(...GOLD);pdf.setLineWidth(0.8);pdf.line(X,y,X+66,y);y+=3.6;
-      rico([["Aos setores.",false]],9,X,larg(y));
+      rico([[it.saud+(it.setoresOn?" ":""),false],[it.setoresOn?it.setores:"",true],[".",false]],9,X,larg(y));
       rico([["Assunto: ",false],[it.assunto,true]],9,X,larg(y));y+=1.5;
     } else if(it.t==="sec"){
       const prox=itens[ix+1]; cabe(11+(prox?(prox.t==="tab"?17:prox.t!=="sec"?7:0):0));
@@ -1379,7 +1379,7 @@ async function gerarDOCX(d){
   b+=wp(wr("MEMORANDO",{b:true,sz:18,color:"8A6D2B"}),{after:0});
   b+=wp(wr("Nº "+numeroTxt(m.seq,m.ano),{b:true,sz:44,color:"1B3A5C"})+(d.status==="cancelado"?wr("  CANCELADO",{b:true,sz:22,color:"A63A32"}):""),{after:0});
   b+=wp(wr("Em "+extenso(d.m_data),{b:true,sz:22,color:"2B5A84"}),{after:120,border:"C9A54B"});
-  b+=wp(wr("Aos setores."),{after:20});
+  {const ds=(d.deps||[]).filter(x=>x.on);b+=wp(wr(ds.length===1?"Ao setor ":"Aos setores"+(ds.length?" ":""))+(ds.length?wr(listaSetores(d.deps||[]),{b:true}):"")+wr("."),{after:20});}
   b+=wp(wr("Assunto: ")+wr(d.m_assunto||"",{b:true}),{after:80});
   b+=wsec("Dados da empresa");
   [["Nome",d.e_razao],["Nome fantasia",d.e_fantasia],["CNPJ",d.e_cnpj],["Abertura",br(d.e_abertura)],["Cliente desde",br(d.e_desde)],["Situação",d.e_situacao],["NIRE",d.e_nire],["Capital social",d.e_capital],["Inscrição estadual",d.e_ie],["Inscrição municipal",d.e_im],["Natureza jurídica",d.e_natureza],["Endereço",d.e_endereco],["Telefone da empresa",d.e_tel],["E-mail da empresa",d.e_email]].forEach(x=>{if(x[0]!=="Natureza jurídica"||x[1])b+=wkv(x[0],x[1])});
