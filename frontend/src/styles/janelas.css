@@ -1,0 +1,176 @@
+/*
+ * Tema das janelas embutidas (formulário do memorando e simulador de planejamento),
+ * para seguirem o mesmo padrão do sistema: cantos arredondados, sombras suaves, azul-marinho e dourado.
+ * Usa só os tokens globais. Compilado como assets/janelas.css e carregado pelas páginas embutidas.
+ */
+@import "./tokens.css";
+
+/* ---------- comum ---------- */
+body.embed,
+body.embed-trib {
+  background: var(--color-bg) !important;
+  font-family: var(--font-body);
+}
+body.embed ::selection,
+body.embed-trib ::selection { background: var(--color-gold-100); }
+
+/* ---------- formulário do memorando (legado/index.html em modo embutido) ---------- */
+body.embed {
+  --bg: var(--color-bg);
+  --surface: var(--color-surface);
+  --surface-2: var(--color-surface-2);
+  --ink: var(--color-text);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --navy: var(--color-navy-700);
+  --blue: var(--color-navy-600);
+  --gold: var(--color-gold-500);
+  --gold-soft: var(--color-gold-100);
+  --ok: var(--color-success);
+  --warn: var(--color-warning);
+  --bad: var(--color-danger);
+  --f-display: var(--font-display);
+  --f-body: var(--font-body);
+}
+body.embed .wrap { padding: var(--space-4) var(--space-4) var(--space-8) !important; }
+body.embed .grid { margin-top: 0; gap: var(--space-5); }
+body.embed section.card,
+body.embed .atu {
+  border-radius: var(--radius-lg);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-5) var(--space-6) var(--space-6);
+}
+body.embed .card h2,
+body.embed .atu h3 {
+  font: var(--weight-bold) var(--text-lg) / 1.2 var(--font-display);
+  text-transform: none;
+  letter-spacing: 0.2px;
+  color: var(--color-navy-800);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--color-grid);
+  margin-bottom: var(--space-4);
+}
+body.embed .card h2 .n {
+  width: 28px; height: 28px; border: 0;
+  background: var(--color-navy-800); color: var(--color-gold-500);
+  font: var(--weight-bold) var(--text-sm) var(--font-display);
+  box-shadow: 0 0 0 3px var(--color-gold-100);
+}
+body.embed .card .hint { margin-top: -6px; }
+body.embed label, body.embed .lbl { font-size: var(--text-xs); letter-spacing: 0.04em; }
+body.embed input[type=text], body.embed input[type=date], body.embed input[type=search], body.embed input[type=password],
+body.embed input:not([type]), body.embed select, body.embed textarea {
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+body.embed input:focus, body.embed select:focus, body.embed textarea:focus,
+body.embed button:focus-visible { outline: none; border-color: var(--color-gold-500); box-shadow: var(--focus-ring); }
+body.embed .btn { border-radius: var(--radius-sm); padding: 10px 16px; font-size: var(--text-sm); transition: background var(--transition), border-color var(--transition); }
+body.embed .btn.sm { padding: 6px 12px; font-size: var(--text-xs); }
+body.embed .btn.primary { background: var(--color-navy-700); border-color: var(--color-navy-700); }
+body.embed .btn.primary:hover:not(:disabled) { background: var(--color-navy-800); }
+body.embed .btn.gold { background: var(--color-gold-500); border-color: var(--color-gold-500); color: var(--color-black); }
+body.embed .btn.link { border-radius: var(--radius-sm); }
+body.embed .btn.link:hover { background: var(--color-navy-100); }
+body.embed .chip { border-radius: var(--radius-pill); padding: 6px 14px; background: var(--color-surface); }
+body.embed .chip.on { border-color: var(--color-navy-700); background: var(--color-navy-100); color: var(--color-navy-700); font-weight: var(--weight-semibold); }
+body.embed .pill { border-radius: var(--radius-pill); padding: 2px 10px; }
+body.embed .tbl-wrap { border-radius: var(--radius-md); overflow: hidden; }
+body.embed table.t th { background: var(--color-navy-800); color: var(--color-text-inverse); border-bottom: 0; padding: 9px 12px; }
+body.embed table.t th:first-child { box-shadow: inset 3px 0 0 var(--color-gold-500); }
+body.embed table.t td { padding: 9px 12px; }
+body.embed .layouts { gap: var(--space-3); }
+body.embed .lay { border-radius: var(--radius-md); box-shadow: var(--shadow-sm); transition: transform var(--transition), box-shadow var(--transition); }
+body.embed .lay:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+body.embed .lay[aria-pressed="true"] { border-color: var(--color-gold-500); box-shadow: 0 0 0 3px var(--color-gold-100), var(--shadow-md); }
+body.embed .actions {
+  border-radius: var(--radius-lg);
+  border: var(--border-width) solid var(--color-border);
+  border-top: 3px solid var(--color-gold-500);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-3) var(--space-5);
+  margin-top: var(--space-2);
+}
+body.embed .edit-banner, body.embed .notice { border-radius: var(--radius-md); }
+body.embed .edit-banner { background: var(--color-gold-100); border-color: var(--color-gold-500); }
+body.embed .preview-head b { font: var(--weight-bold) var(--text-md) var(--font-display); text-transform: none; letter-spacing: 0.2px; color: var(--color-navy-800); }
+body.embed #preview { background: var(--color-surface); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: var(--space-4); }
+body.embed #viewer { background: rgba(12, 27, 46, 0.55); }
+body.embed #viewer .vw { border-radius: var(--radius-lg); border-top: 4px solid var(--color-gold-500); box-shadow: var(--shadow-lg); }
+body.embed #viewer .vb { background: var(--color-bg); }
+body.embed #toast { border-radius: var(--radius-md); box-shadow: var(--shadow-lg); border-left: 4px solid var(--color-gold-500); }
+
+/* ---------- simulador de planejamento tributário (srcdoc, modo embed-trib) ---------- */
+body.embed-trib {
+  --bg: var(--color-bg);
+  --surface: var(--color-surface);
+  --surface-2: var(--color-surface-2);
+  --line: var(--color-border);
+  --fg: var(--color-text);
+  --muted: var(--color-text-muted);
+  --navy: var(--color-navy-700);
+  --blue: var(--color-navy-600);
+  --sky: var(--color-navy-100);
+  --gold: var(--color-gold-500);
+  --good: var(--color-success);
+  --good-bg: var(--color-success-bg);
+  --bad: var(--color-danger);
+  --bad-bg: var(--color-danger-bg);
+  --warn: var(--color-warning);
+  --warn-bg: var(--color-warning-bg);
+  /* campos brancos, borda suave e foco dourado (no lugar do amarelo de planilha) */
+  --input-bg: var(--color-surface);
+  --input-line: var(--color-border);
+  --input-edge: var(--color-border-strong);
+  --input-focus: var(--color-surface);
+  --f-display: var(--font-display);
+  --f-body: var(--font-body);
+}
+body.embed-trib .wrap { padding: var(--space-4) var(--space-4) var(--space-8) !important; }
+body.embed-trib .ctl,
+body.embed-trib .sel {
+  border-width: var(--border-width) !important;
+  border-left-width: var(--border-width) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: none !important;
+}
+body.embed-trib .ctl:focus-within,
+body.embed-trib .sel:focus { border-color: var(--color-gold-500) !important; box-shadow: var(--focus-ring) !important; }
+body.embed-trib .ctl.locked { background: var(--color-surface-2); }
+body.embed-trib button { border-radius: var(--radius-sm); padding: 9px 14px; }
+body.embed-trib button.primary:hover:not(:disabled) { background: var(--color-navy-800); }
+body.embed-trib .addbtn { border-radius: var(--radius-sm); border-color: var(--color-navy-600); color: var(--color-navy-600); }
+body.embed-trib .pt-base,
+body.embed-trib .pt-sc,
+body.embed-trib .pt-par,
+body.embed-trib .pt-tab,
+body.embed-trib .pt-rel,
+body.embed-trib .pt-cbsbox,
+body.embed-trib .ledger {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-border);
+}
+body.embed-trib .pt-base { border: var(--border-width) solid var(--color-border); border-top: 3px solid var(--color-gold-500); padding: var(--space-5) var(--space-6); }
+body.embed-trib .pt-emp { border-radius: var(--radius-md); background: var(--color-surface-2); }
+body.embed-trib .pt-res {
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-navy-900), var(--color-navy-700));
+  border-bottom: 4px solid var(--color-gold-500);
+  box-shadow: var(--shadow-lg);
+}
+body.embed-trib .pt-col { border-radius: var(--radius-md); }
+body.embed-trib .pt-tab { overflow: hidden; }
+body.embed-trib .pt-tab thead th { background: var(--color-navy-800); }
+body.embed-trib .pt-cbsbox .pt-tab thead th { background: var(--color-navy-700); }
+body.embed-trib .pt-modo span { border-radius: var(--radius-pill); }
+body.embed-trib .pt-modo input:checked + span { border-color: var(--color-navy-700); background: var(--color-navy-100); color: var(--color-navy-700); }
+body.embed-trib .pt-cbs { border-radius: var(--radius-md); }
+body.embed-trib .pt-warn { border-radius: var(--radius-sm); }
+body.embed-trib .pt-reg { border-radius: var(--radius-pill); padding: 3px 10px; }
+body.embed-trib .tabs button { border-radius: 0; }

@@ -18,6 +18,7 @@ frontend/
     App.tsx                  rotas (HashRouter: funciona na raiz e em /memorandos sem regra no Apache)
     styles/tokens.css        TODAS as cores, fontes, espaçamentos, bordas e sombras globais
     styles/global.css        reset e base
+    styles/janelas.css       tema das janelas embutidas (memorando e planejamento), compilado como assets/janelas.css
     types/                   tipos compartilhados (memorando, colaborador, certificado, planejamento, auth)
     lib/                     formatadores e regras puras (format, memorando, storage, constantes, files)
     services/                camada de acesso ao api.php (http + um serviço por domínio)
