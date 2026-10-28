@@ -1,0 +1,8 @@
+.tela { min-height: 100vh; display: grid; place-items: center; padding: var(--space-4); background: radial-gradient(circle at 20% 10%, var(--color-navy-700), var(--color-navy-900) 60%); }
+.cartao { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: var(--space-4); background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-8) var(--space-6); box-shadow: var(--shadow-lg); border-top: 4px solid var(--color-gold-500); }
+.logo { width: 170px; margin: 0 auto; }
+.regua { height: 2px; background: linear-gradient(90deg, transparent, var(--color-gold-500), transparent); }
+.titulo { text-align: center; font-size: var(--text-xl); }
+.sub { margin: -12px 0 0; text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); }
+.rodape { margin: 0; text-align: center; font-size: var(--text-xs); color: var(--color-text-muted); }
+.rodape b { color: var(--color-navy-800); letter-spacing: 0.08em; }

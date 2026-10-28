@@ -1,0 +1,4 @@
+.notice { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); border: var(--border-width) solid var(--color-border); border-left-width: 4px; font-size: var(--text-sm); background: var(--color-surface); }
+.info { border-left-color: var(--color-info); background: var(--color-info-bg); }
+.alerta { border-left-color: var(--color-warning); background: var(--color-warning-bg); }
+.erro { border-left-color: var(--color-danger); background: var(--color-danger-bg); }

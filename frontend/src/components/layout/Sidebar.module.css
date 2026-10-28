@@ -1,0 +1,23 @@
+.sidebar {
+  position: fixed; inset: 0 auto 0 0; width: var(--sidebar-width); z-index: var(--z-sidebar);
+  display: flex; flex-direction: column; background: var(--color-navy-900); color: var(--color-text-inverse);
+  border-right: 3px solid var(--color-gold-500);
+}
+.marca { padding: var(--space-5) var(--space-5) var(--space-4); }
+.logo { width: 100%; max-width: 190px; margin: 0 auto; background: var(--color-white); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); box-shadow: var(--shadow-md); }
+.nav { display: flex; flex-direction: column; gap: 2px; padding: var(--space-3); flex: 1; overflow-y: auto; }
+.link {
+  display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-3); border-radius: var(--radius-sm);
+  color: rgba(255, 255, 255, 0.78); text-decoration: none; font-weight: var(--weight-semibold); font-size: var(--text-sm);
+  border-left: 3px solid transparent; transition: background var(--transition), color var(--transition);
+}
+.link:hover { background: rgba(255, 255, 255, 0.06); color: var(--color-white); }
+.ativo { background: rgba(184, 145, 58, 0.16); color: var(--color-white); border-left-color: var(--color-gold-500); }
+.ativo svg { color: var(--color-gold-500); }
+.rodape { padding: var(--space-4) var(--space-5); border-top: 1px solid rgba(255, 255, 255, 0.1); font-size: var(--text-xs); color: rgba(255, 255, 255, 0.6); display: flex; flex-direction: column; gap: 2px; }
+.neeko b { color: var(--color-gold-500); letter-spacing: 0.08em; }
+
+@media (max-width: 960px) {
+  .sidebar { transform: translateX(-100%); transition: transform var(--transition); box-shadow: var(--shadow-lg); }
+  .aberta { transform: none; }
+}

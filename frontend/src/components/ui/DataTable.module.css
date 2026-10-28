@@ -1,0 +1,24 @@
+.wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tabela { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.tabela th {
+  text-align: left; font: var(--weight-semibold) var(--text-xs) var(--font-body); text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--color-text-inverse); background: var(--color-navy-800); padding: 10px 14px; white-space: nowrap;
+}
+.tabela th:first-child { border-left: 3px solid var(--color-gold-500); }
+.tabela td { padding: 11px 14px; border-bottom: var(--border-width) solid var(--color-border); vertical-align: top; }
+.tabela tbody tr:hover td { background: var(--color-surface-2); }
+.tabela tfoot td { font-weight: var(--weight-bold); background: var(--color-surface-2); border-top: 2px solid var(--color-navy-700); padding: 10px 14px; }
+.tabela .esquerda { text-align: left; }
+.tabela .direita { text-align: right; font-variant-numeric: tabular-nums; }
+.tabela .centro { text-align: center; }
+.vazio { text-align: center; color: var(--color-text-muted); padding: var(--space-8) !important; }
+.apagada td { color: var(--color-text-muted); }
+
+/* no celular, cada linha vira um bloco com o título da coluna */
+@media (max-width: 640px) {
+  .tabela thead { display: none; }
+  .tabela, .tabela tbody, .tabela tr, .tabela td { display: block; width: 100%; }
+  .tabela tr { border-bottom: var(--border-width) solid var(--color-border); padding: var(--space-2) 0; }
+  .tabela td { border: 0; padding: 4px 14px; text-align: left; }
+  .tabela td[data-titulo]::before { content: attr(data-titulo); display: block; font-size: var(--text-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+}

@@ -1,12 +1,71 @@
-# Memorandos de entrada de empresa — Facilitar
+# Sistema de gestão — Facilitar Serviços Contábeis
 
-Formulário de memorando para clientes novos: consulta de CNPJ, regime tributário, anexos do Simples, atividades (CNAE), códigos de serviço (LC 116), departamentos e responsáveis. Os memorandos são numerados por ano (número editável), ficam arquivados no servidor, podem ser pesquisados e baixados em PDF ou Word, em 4 layouts da Facilitar.
+Memorandos de entrada de empresa, painel gerencial da carteira, colaboradores, certificados digitais e planejamento tributário.
+Front-end em **React + Vite + TypeScript + CSS Modules** (`frontend/`), back-end em **PHP** (`api.php`, arquivos JSON no volume `/data`).
 
-## Arquivos
-- `index.html` — o sistema (página única).
-- `planejamento/planejamento-tributario.html` — o planejamento tributário (Simples × Presumido × Real, transição CBS/IBS 2026-2035), aberto na aba **Planejamento tributário**. Fica fora da pasta pública: o `api.php` (ação `planejamento`) só entrega a página a quem entrou com a senha. Na aba dá para salvar o planejamento no servidor (por cliente), abrir, editar, salvar como novo e excluir; os arquivos ficam em `/data/planejamentos` (mesmo volume dos memorandos).
-- `api.php` — guarda os memorandos em `dados/` e consulta o CNPJ (BrasilAPI, com ReceitaWS como alternativa).
-- `config.exemplo.php` — modelo da configuração da senha.
+Produzido por **NEEKO Automação Inteligente**.
+
+## Estrutura
+
+```
+api.php                      back-end (ações via ?acao=..., senha no cabeçalho X-Senha)
+legado/index.html            formulário do memorando (CNPJ/IE, CNAEs, sócios, prévia A4, PDF e Word), aberto pelo front-end em modo embutido
+planejamento/                simulador de planejamento tributário (fora da pasta pública; entregue pelo api.php)
+frontend/
+  public/logo-facilitar.png  logo do menu lateral e do login
+  scripts/gerar-anexos-cnae.mjs  gera src/lib/cnaeAnexos.json a partir da tabela CNAE do legado
+  src/
+    App.tsx                  rotas (HashRouter: funciona na raiz e em /memorandos sem regra no Apache)
+    styles/tokens.css        TODAS as cores, fontes, espaçamentos, bordas e sombras globais
+    styles/global.css        reset e base
+    types/                   tipos compartilhados (memorando, colaborador, certificado, planejamento, auth)
+    lib/                     formatadores e regras puras (format, memorando, storage, constantes, files)
+    services/                camada de acesso ao api.php (http + um serviço por domínio)
+    components/ui/           componentes reutilizáveis (Button, Card, Field, Badge, KpiCard, DataTable, Modal, ConfirmDialog, Toast, BarList, PageHeader, Notice, Loading, Icon, EmptyState)
+    components/layout/       AppLayout, Sidebar (logo Facilitar), Header (perfil do usuário), Footer (NEEKO), navegação
+    features/                um módulo de negócio por pasta
+      auth/                  login e contexto de autenticação
+      painel/                painel gerencial (indicadores, gráficos, resumo mensal)
+      memorandos/            arquivo, ações de situação e editor (módulo legado embutido)
+      colaboradores/         cadastro e empresas vinculadas
+      configuracoes/         certificados digitais
+      planejamento/          planejamento tributário salvo no servidor
+```
+
+### Regras de arquitetura
+1. Cada módulo de negócio fica em `src/features/<modulo>/`, com suas telas, componentes próprios e CSS Modules.
+2. Antes de criar um componente, verifique `src/components/ui/` e `src/components/layout/`.
+3. Cores, fontes, espaçamentos, bordas e sombras só em `src/styles/tokens.css`; os componentes usam as variáveis.
+4. Tipos compartilhados em `src/types/`; formatadores e funções auxiliares em `src/lib/` (sem duplicar).
+5. Chamadas ao back-end só pela camada `src/services/` — telas e componentes visuais não chamam `fetch`.
+
+## Integração com o back-end (api.php)
+
+Autenticação: senha única da equipe (`SENHA_ACESSO`) enviada no cabeçalho `X-Senha`, com o nome do usuário gravado no histórico. O login valida a senha com a ação `listar`. A credencial fica no navegador com a mesma chave do módulo legado (`memo-cred`), para os dois funcionarem juntos. Se o servidor responder 401, o sistema volta para o login.
+
+| Serviço (`frontend/src/services`) | Ações do api.php | Usado em |
+|---|---|---|
+| `authService` | `listar` (validação da senha) | Login |
+| `memorandosService` | `listar`, `status`, `cliente`, `excluir` | Painel, Arquivo, Colaboradores |
+| `colaboradoresService` | `colabs`, `colabsalvar`, `colabexcluir` | Colaboradores, Painel |
+| `certificadosService` | `certlistar`, `certenviar`, `certpadrao`, `certremover` | Configurações |
+| `planejamentoService` | `planejamento`, `planlistar`, `planler`, `plansalvar`, `planexcluir` | Planejamento tributário |
+| módulo legado (`legado/index.html`) | `salvar`, `cnpj`, `ie`, `colabs`, `certlistar`, `listar` | Novo / editar / visualizar memorando, PDF e Word |
+
+Nenhum endpoint novo foi criado para o front-end. O formulário do memorando continua no módulo legado (aberto em `#/memorandos/novo` e `#/memorandos/<id>/<editar|ver|pdf|docx>`): ele avisa o front-end ao salvar (`postMessage` "memo-salvo") e o arquivo é recarregado.
+
+## Desenvolvimento
+
+```bash
+cd frontend
+npm install
+# em outro terminal, um PHP local servindo a raiz do repositório (o Vite encaminha /api.php e /legado):
+#   SENHA_ACESSO=teste DADOS_DIR=/tmp/dados php -S 127.0.0.1:8099 -t ..
+npm run dev
+npm run build      # compilação de produção (tsc + vite) em frontend/dist
+```
+
+Se a tabela CNAE do legado mudar, rode `node scripts/gerar-anexos-cnae.mjs` (anexos do Simples usados no painel).
 
 ## Instalação no Easypanel (VPS Hostinger)
 1. No Easypanel, crie um serviço **App** e escolha como fonte o GitHub: repositório `developermjautomacoes-jpg/facilitar`, branch `main`.
@@ -24,7 +83,7 @@ Os arquivos ficam em `/data/cert` (volume) e as senhas ficam cifradas com uma ch
 Se a SEFAZ responder "Rejeição 257 – solicitante não habilitado", use um e-CNPJ de empresa habilitada como emissora de NF-e no ES.
 
 ## Instalação em hospedagem compartilhada
-1. Publique o repositório na pasta do site (Git da Hostinger ou upload dos arquivos).
+1. Rode `npm run build` em `frontend/` e envie para a pasta do site o conteúdo de `frontend/dist/`, mais `api.php`, `.htaccess`, `config.exemplo.php` e as pastas `legado/` e `planejamento/`.
 2. No servidor, copie `config.exemplo.php` para `config.php` e defina `SENHA_ACESSO`.
 3. Acesse o endereço da pasta e entre com seu nome e a senha.
 

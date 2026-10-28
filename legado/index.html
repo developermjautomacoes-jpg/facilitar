@@ -276,7 +276,8 @@ body.locked .wrap,body.locked .toast{display:none!important}
 .m-obs{margin:4px 0 0;text-align:justify}
 .m-tag{display:inline-block;font-size:9px;font-weight:700;padding:0 5px;border-radius:7px;background:#1B3A5C;color:#fff;margin-left:4px;vertical-align:1px}
 </style>
-<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>body.embed header.top,body.embed #view-painel,body.embed #view-colab,body.embed #view-config,body.embed #view-arquivo,body.embed #view-planej{display:none!important}body.embed .wrap{max-width:none}
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
 
@@ -711,7 +712,8 @@ const S = {
 let DB=null, USER=null, DL=null, MCP=null, MY_ID=null, MY_NAME="";
 /* modo "claude" (artefato no claude.ai) ou "api" (hospedado, com api.php no servidor) */
 let MODO="claude";
-const API_URL="api.php";
+const API_URL="../api.php";   // o api.php fica na raiz; esta página é o módulo legado (formulário do memorando, PDF e Word)
+const EMBED=new URLSearchParams(location.search).get("embed")==="1";
 let CRED=(()=>{try{return JSON.parse(lsGet("memo-cred")||"null")}catch(e){return null}})();
 async function api(acao,body){
   if(!CRED){pedirLogin();throw new Error("Entre com a senha de acesso.")}
@@ -1623,6 +1625,7 @@ async function salvarAPI(){
     toast(antigo&&antigo!==novo?"Memorando renumerado de "+antigo+" para "+novo+".":antigo?"Memorando Nº "+novo+" atualizado.":"Memorando Nº "+novo+" salvo no arquivo.");
     S.original=JSON.parse(JSON.stringify(getForm()));
     lsDel("memo-draft");await carregarAPI();renderHist();schedulePreview();
+    if(EMBED&&window.parent!==window) window.parent.postMessage({tipo:"memo-salvo",id:m._id,numero:novo},location.origin);
   }catch(e){toast(e.message||"Erro ao salvar.")}
   finally{btn.disabled=false;btn.textContent="Salvar memorando"}
 }
@@ -2082,6 +2085,7 @@ $("btnApresentar").onclick=async()=>{const el=$("painelBody");try{if(el.requestF
   if(!ok)blankForm();
   if(document.fonts&&document.fonts.ready)document.fonts.ready.then(schedulePreview);
 })();
+if(EMBED) document.body.classList.add("embed");
 (async function caps(){
   const c=window.claude;
   if(!c||!c.use){
@@ -2092,6 +2096,11 @@ $("btnApresentar").onclick=async()=>{const el=$("painelBody");try{if(el.requestF
       catch(e){$("lg_msg").textContent=e.message}});
     if(!CRED){pedirLogin();renderLista();return}
     await carregarAPI();
+    if(EMBED){ const q=new URLSearchParams(location.search), id=q.get("memo"), ac=q.get("acao");
+      if(ac==="novo"){ lsDel("memo-draft"); blankForm(); }
+      else if(id&&ARQ.some(x=>x._id===id)){ if(ac==="ver") visualizar(id); else abrirDoc(id);
+        if(ac==="pdf") gerarPDF(ARQ.find(x=>x._id===id)); else if(ac==="docx") gerarDOCX(ARQ.find(x=>x._id===id)); }
+      showView("novo"); }
     setInterval(()=>{if(!document.hidden&&CRED)carregarAPI()},60000);
     return;
   }

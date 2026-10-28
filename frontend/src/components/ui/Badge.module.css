@@ -1,0 +1,7 @@
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: var(--radius-pill); font-size: var(--text-xs); font-weight: var(--weight-semibold); white-space: nowrap; border: var(--border-width) solid transparent; }
+.neutro { background: var(--color-surface-2); color: var(--color-text-muted); border-color: var(--color-border); }
+.navy { background: var(--color-navy-100); color: var(--color-navy-700); }
+.gold { background: var(--color-gold-100); color: var(--color-gold-600); }
+.sucesso { background: var(--color-success-bg); color: var(--color-success); }
+.alerta { background: var(--color-warning-bg); color: var(--color-warning); }
+.perigo { background: var(--color-danger-bg); color: var(--color-danger); }
