@@ -415,6 +415,61 @@ if ($acao === 'planejamento') {
     sai(200, ['html' => $html]);
 }
 
+// ---------- planejamentos tributários salvos ----------
+$planDir = $base . '/planejamentos';
+function planIdValido($id) { return is_string($id) && preg_match('/^P\d{8}-\d{6}-[a-f0-9]{6}$/', $id); }
+function planMeta($p) { return ['id' => $p['id'], 'cliente' => $p['cliente'] ?? '', 'resumo' => $p['resumo'] ?? '',
+    'criadoEm' => $p['criadoEm'] ?? '', 'criadoPor' => $p['criadoPor'] ?? '', 'atualizadoEm' => $p['atualizadoEm'] ?? '', 'atualizadoPor' => $p['atualizadoPor'] ?? '']; }
+if (in_array($acao, ['planlistar', 'planler', 'plansalvar', 'planexcluir'], true)) {
+    if (!is_dir($planDir) && !mkdir($planDir, 0755, true)) sai(500, ['erro' => 'Não foi possível criar a pasta dos planejamentos.']);
+}
+if ($acao === 'planlistar') {
+    $out = [];
+    foreach (glob($planDir . '/*.json') as $f) { $p = ler($f); if ($p && isset($p['id'])) $out[] = planMeta($p); }
+    usort($out, function ($a, $b) { return strcmp($b['atualizadoEm'], $a['atualizadoEm']); });
+    sai(200, ['planejamentos' => $out]);
+}
+if ($acao === 'planler') {
+    $id = $_GET['id'] ?? '';
+    if (!planIdValido($id)) sai(400, ['erro' => 'Pedido inválido.']);
+    $p = ler($planDir . '/' . $id . '.json');
+    if (!$p) sai(404, ['erro' => 'Planejamento não encontrado.']);
+    sai(200, ['planejamento' => $p]);
+}
+if ($acao === 'plansalvar') {
+    $cliente = mb_substr(trim((string)($in['cliente'] ?? '')), 0, 120);
+    $estado = $in['estado'] ?? null;
+    if ($cliente === '' || !is_array($estado)) sai(400, ['erro' => 'Informe o cliente e o planejamento.']);
+    if (strlen(json_encode($estado)) > 2000000) sai(413, ['erro' => 'Planejamento grande demais.']);
+    $usuario = mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80);
+    $agora = date('c');
+    $id = $in['id'] ?? null;
+    $p = null;
+    if ($id !== null && $id !== '') {
+        if (!planIdValido($id)) sai(400, ['erro' => 'Pedido inválido.']);
+        $p = ler($planDir . '/' . $id . '.json');
+        if (!$p) sai(404, ['erro' => 'Planejamento não encontrado (pode ter sido excluído). Use "Salvar como novo".']);
+    } else {
+        $id = 'P' . date('Ymd-His') . '-' . bin2hex(random_bytes(3));
+        $p = ['id' => $id, 'criadoEm' => $agora, 'criadoPor' => $usuario];
+    }
+    $p['cliente'] = $cliente;
+    $p['resumo'] = mb_substr(trim((string)($in['resumo'] ?? '')), 0, 400);
+    $p['estado'] = $estado;
+    $p['atualizadoEm'] = $agora;
+    $p['atualizadoPor'] = $usuario;
+    if (!grava($planDir . '/' . $id . '.json', $p)) sai(500, ['erro' => 'Não foi possível gravar.']);
+    sai(200, ['ok' => true, 'planejamento' => planMeta($p)]);
+}
+if ($acao === 'planexcluir') {
+    $id = $in['id'] ?? '';
+    if (!planIdValido($id)) sai(400, ['erro' => 'Pedido inválido.']);
+    $f = $planDir . '/' . $id . '.json';
+    if (!file_exists($f)) sai(404, ['erro' => 'Planejamento não encontrado.']);
+    if (!@unlink($f)) sai(500, ['erro' => 'Não foi possível excluir.']);
+    sai(200, ['ok' => true]);
+}
+
 if ($acao === 'cliente') {
     $id = $in['id'] ?? ''; $sit = $in['situacaoCliente'] ?? '';
     if (!idValido($id) || !in_array($sit, ['ativa', 'inativa'], true)) sai(400, ['erro' => 'Pedido inválido.']);
