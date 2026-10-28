@@ -4,6 +4,7 @@ Formulário de memorando para clientes novos: consulta de CNPJ, regime tributár
 
 ## Arquivos
 - `index.html` — o sistema (página única).
+- `planejamento/planejamento-tributario.html` — o planejamento tributário (Simples × Presumido × Real, transição CBS/IBS 2026-2035), aberto na aba **Planejamento tributário**. Fica fora da pasta pública: o `api.php` (ação `planejamento`) só entrega a página a quem entrou com a senha. Os dados digitados ficam no navegador de cada usuário.
 - `api.php` — guarda os memorandos em `dados/` e consulta o CNPJ (BrasilAPI, com ReceitaWS como alternativa).
 - `config.exemplo.php` — modelo da configuração da senha.
 

@@ -407,6 +407,14 @@ if ($acao === 'excluir') {
     sai(200, ['ok' => true]);
 }
 
+// Planejamento tributário: a página fica fora da pasta pública e só é entregue a quem tem a senha
+if ($acao === 'planejamento') {
+    $f = getenv('PLANEJ_HTML') ?: (__DIR__ . '/planejamento/planejamento-tributario.html');
+    $html = @file_get_contents($f);
+    if ($html === false) sai(404, ['erro' => 'Arquivo do planejamento tributário não encontrado no servidor.']);
+    sai(200, ['html' => $html]);
+}
+
 if ($acao === 'cliente') {
     $id = $in['id'] ?? ''; $sit = $in['situacaoCliente'] ?? '';
     if (!idValido($id) || !in_array($sit, ['ativa', 'inativa'], true)) sai(400, ['erro' => 'Pedido inválido.']);

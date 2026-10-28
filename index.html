@@ -279,6 +279,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
       <button class="tab" role="tab" id="tab-colab" aria-selected="false" data-view="colab">Colaboradores</button>
       <button class="tab" role="tab" id="tab-cfg" aria-selected="false" data-view="config" hidden>Configurações</button>
       <button class="tab" role="tab" id="tab-arq" aria-selected="false" data-view="arquivo">Arquivo <span class="count" id="countArq">0</span></button>
+      <button class="tab" role="tab" id="tab-planej" aria-selected="false" data-view="planej">Planejamento tributário</button>
     </nav>
   </header>
   <div id="dbNotice" class="notice" hidden></div>
@@ -546,6 +547,12 @@ body.locked .wrap,body.locked .toast{display:none!important}
         <p class="small muted" style="margin-top:12px">A SEFAZ-ES confere o CNPJ de quem consulta. Um e-CPF pode receber "Rejeição 257 – solicitante não habilitado"; nesse caso use o e-CNPJ de uma empresa habilitada a emitir NF-e no ES.</p>
       </section>
     </div>
+  </div>
+
+  <!-- ===================== PLANEJAMENTO TRIBUTÁRIO ===================== -->
+  <div id="view-planej" hidden>
+    <div id="planejMsg" class="notice" hidden></div>
+    <iframe id="planejFrame" title="Planejamento tributário" style="width:100%;height:calc(100vh - 150px);min-height:720px;border:0;border-radius:12px;background:#fff"></iframe>
   </div>
 
   <div id="view-arquivo" hidden>
@@ -1927,7 +1934,19 @@ async function painelPdf(){
 function showView(vw){
   $("view-novo").hidden=vw!=="novo";$("view-arquivo").hidden=vw!=="arquivo";$("view-painel").hidden=vw!=="painel";$("view-config").hidden=vw!=="config";$("tab-cfg").setAttribute("aria-selected",vw==="config");$("view-colab").hidden=vw!=="colab";$("tab-colab").setAttribute("aria-selected",vw==="colab");
   $("tab-novo").setAttribute("aria-selected",vw==="novo");$("tab-arq").setAttribute("aria-selected",vw==="arquivo");$("tab-painel").setAttribute("aria-selected",vw==="painel");
-  if(vw==="arquivo")renderLista(); else if(vw==="painel")renderPainel(); else if(vw==="config")carregarCerts(); else if(vw==="colab")renderColabs(); else schedulePreview();
+  $("view-planej").hidden=vw!=="planej";$("tab-planej").setAttribute("aria-selected",vw==="planej");
+  if(vw==="planej")carregarPlanej(); else if(vw==="arquivo")renderLista(); else if(vw==="painel")renderPainel(); else if(vw==="config")carregarCerts(); else if(vw==="colab")renderColabs(); else schedulePreview();
+}
+
+/* ---------- planejamento tributário (página servida pelo api.php só para quem entrou com a senha) ---------- */
+let PLANEJ_OK=false;
+async function carregarPlanej(){
+  if(PLANEJ_OK) return;
+  const msg=$("planejMsg");
+  if(MODO!=="api"){ msg.hidden=false; msg.textContent="O planejamento tributário fica disponível no sistema hospedado (com o api.php no servidor)."; return; }
+  msg.hidden=false; msg.textContent="Carregando o planejamento tributário…";
+  try{ const j=await api("planejamento"); $("planejFrame").srcdoc=j.html; PLANEJ_OK=true; msg.hidden=true; }
+  catch(e){ msg.hidden=false; msg.textContent="Não foi possível abrir o planejamento tributário: "+e.message; }
 }
 
 /* ---------- eventos ---------- */
