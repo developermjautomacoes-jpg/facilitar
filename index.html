@@ -423,7 +423,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
             <div class="f"><label for="r_sintegra">Sintegra</label><input type="text" id="r_sintegra"></div>
             <div class="f"><label for="r_spedc">SPED Contábil</label><select id="r_spedc"><option></option><option>Sim</option><option>Não</option></select></div>
             <div class="f"><label for="r_spedf">SPED Fiscal</label><select id="r_spedf"><option></option><option>Sim</option><option>Não</option></select></div>
-            <div class="f wide"><span class="lbl">Ferramentas já configuradas para a empresa</span><div class="chips" id="ferramentas" style="margin-top:4px"></div></div>
+            <div class="f wide"><span class="lbl">Ferramentas a serem configuradas</span><div class="chips" id="ferramentas" style="margin-top:4px"></div></div>
             <div class="f wide"><span class="lbl">Fará a emissão de</span><div class="chips" id="emissao" style="margin-top:4px"></div></div>
             <div class="f"><label for="r_loginNfse">Login NFS-e</label><input type="text" id="r_loginNfse"></div>
             <div class="f"><label for="r_senhaNfse">Senha NFS-e</label><input type="text" id="r_senhaNfse" placeholder="Ex.: salva no cofre"></div>
@@ -487,7 +487,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
         <div class="panel"><h3>Ativos por setor atendido</h3><p class="ps">Empresas ativas que têm o setor marcado no memorando.</p><div class="blist" id="blSetor"></div></div>
         <div class="panel"><h3>Ativos no Simples por anexo</h3><p class="ps">Uma empresa pode estar em mais de um anexo.</p><div class="blist" id="blAnexo"></div></div>
         <div class="panel"><h3>Empresas ativas por responsável</h3><p class="ps">Uma empresa conta para cada colaborador vinculado a ela.</p><div class="blist" id="blResp"></div></div>
-        <div class="panel"><h3>Ferramentas configuradas</h3><p class="ps">Empresas ativas com cada ferramenta já configurada.</p><div class="blist" id="blFer"></div></div>
+        <div class="panel"><h3>Ferramentas a serem configuradas</h3><p class="ps">Empresas ativas por ferramenta a configurar.</p><div class="blist" id="blFer"></div></div>
         <div class="panel"><h3>Motivos de saída</h3><p class="ps" id="psMotivo"></p><div class="blist" id="blMotivo"></div></div>
       </div>
       <div class="panel"><h3>Resumo mensal</h3><p class="ps" id="psResumo"></p><div class="tbl-wrap"><table class="t mtab" id="tbMes"></table></div></div>
@@ -1195,7 +1195,7 @@ function modeloMemo(d){
   I.push({t:"kv2",a:["Certificado digital",val(d.r_cert)],b:["Domínio",val(d.r_dominio)]});
   I.push({t:"kv2",a:["Sintegra",val(d.r_sintegra)],b:["SPED Contábil",val(d.r_spedc)]});
   I.push({t:"kv2",a:["SPED Fiscal",val(d.r_spedf)],b:["Fará a emissão",val((d.emissao||[]).join(", "))]});
-  I.push({t:"kv",l:"Ferramentas configuradas",v:val((d.ferramentas||[]).join(", "))});
+  I.push({t:"kv",l:"Ferramentas a configurar",v:val((d.ferramentas||[]).join(", "))});
   I.push({t:"kv2",a:["Login NFS-e",val(d.r_loginNfse)],b:["Senha NFS-e",val(d.r_senhaNfse)]});
   I.push({t:"kv2",a:["Cód. acesso Simples",val(d.r_codSimples)],b:["Senha SEFAZ-ES AGV",val(d.r_sefaz)]});
   I.push({t:"kv2",a:["CPF ADM",val(d.r_cpfAdm)],b:["PIS",val(d.r_pis)]});
@@ -1411,7 +1411,7 @@ async function gerarDOCX(d){
   const deps=(d.deps||[]).filter(x=>x.on);
   b+=deps.length?wtable(["Departamento","Responsável pela empresa"],deps.map(x=>[x.nome,x.resp||"—"]),[2900,W-2900]):wp(wr("Nenhum setor marcado.",{i:true}));
   b+=wsec("Rotinas, acessos e obrigações");
-  [["Pró-labore",d.r_prolabore],["Folha de pagamento",d.r_folha],["Certificado digital",d.r_cert],["Domínio",d.r_dominio],["Sintegra",d.r_sintegra],["SPED Contábil",d.r_spedc],["SPED Fiscal",d.r_spedf],["Fará a emissão",(d.emissao||[]).join(", ")],["Ferramentas configuradas",(d.ferramentas||[]).join(", ")],["Login NFS-e",d.r_loginNfse],["Senha NFS-e",d.r_senhaNfse],["Código de acesso do Simples",d.r_codSimples],["Senha SEFAZ-ES AGV",d.r_sefaz],["CPF ADM",d.r_cpfAdm],["PIS",d.r_pis],["Os documentos da empresa se encontram digitalizados em",d.r_docs]].forEach(x=>b+=wkv(x[0],x[1]));
+  [["Pró-labore",d.r_prolabore],["Folha de pagamento",d.r_folha],["Certificado digital",d.r_cert],["Domínio",d.r_dominio],["Sintegra",d.r_sintegra],["SPED Contábil",d.r_spedc],["SPED Fiscal",d.r_spedf],["Fará a emissão",(d.emissao||[]).join(", ")],["Ferramentas a serem configuradas",(d.ferramentas||[]).join(", ")],["Login NFS-e",d.r_loginNfse],["Senha NFS-e",d.r_senhaNfse],["Código de acesso do Simples",d.r_codSimples],["Senha SEFAZ-ES AGV",d.r_sefaz],["CPF ADM",d.r_cpfAdm],["PIS",d.r_pis],["Os documentos da empresa se encontram digitalizados em",d.r_docs]].forEach(x=>b+=wkv(x[0],x[1]));
   const obs=String(d.obs||"").split(/\n\s*\n|\n/).map(s=>s.trim()).filter(Boolean);
   if(obs.length){b+=wsec("Observações");obs.forEach(p=>b+=wp(wr(p),{after:80,jc:"both"}))}
   const NS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
@@ -1433,7 +1433,7 @@ async function gerarDOCX(d){
 }
 
 /* ---------- histórico ---------- */
-const LABELS={m_data:"Data do memorando",m_assunto:"Assunto",layout:"Layout",e_razao:"Razão social",e_fantasia:"Nome fantasia",e_cnpj:"CNPJ",e_abertura:"Data de abertura",e_desde:"Cliente desde",e_situacao:"Situação cadastral",e_natureza:"Natureza jurídica",e_capital:"Capital social",e_nire:"NIRE",e_ie:"Inscrição estadual",e_im:"Inscrição municipal",e_endereco:"Endereço",e_tel:"Telefone da empresa",e_email:"E-mail da empresa",contatos:"Contatos",socios:"Quadro societário",t_regime:"Opção tributária",t_modalidade:"Simples Puro/Híbrido",ferramentas:"Ferramentas configuradas",t_simples:"Situação no Simples",anexosManual:"Anexos do Simples",atividades:"Atividades (CNAEs)",svOff:"Códigos de serviço",svExtra:"Códigos de serviço",deps:"Departamentos e responsáveis",r_prolabore:"Pró-labore",r_folha:"Folha de pagamento",r_cert:"Certificado digital",r_dominio:"Domínio",r_sintegra:"Sintegra",r_spedc:"SPED Contábil",r_spedf:"SPED Fiscal",emissao:"Emissão de notas",r_loginNfse:"Login NFS-e",r_senhaNfse:"Senha NFS-e",r_codSimples:"Código de acesso do Simples",r_sefaz:"Senha SEFAZ-ES AGV",r_cpfAdm:"CPF ADM",r_pis:"PIS",r_docs:"Documentos digitalizados",obs:"Observações"};
+const LABELS={m_data:"Data do memorando",m_assunto:"Assunto",layout:"Layout",e_razao:"Razão social",e_fantasia:"Nome fantasia",e_cnpj:"CNPJ",e_abertura:"Data de abertura",e_desde:"Cliente desde",e_situacao:"Situação cadastral",e_natureza:"Natureza jurídica",e_capital:"Capital social",e_nire:"NIRE",e_ie:"Inscrição estadual",e_im:"Inscrição municipal",e_endereco:"Endereço",e_tel:"Telefone da empresa",e_email:"E-mail da empresa",contatos:"Contatos",socios:"Quadro societário",t_regime:"Opção tributária",t_modalidade:"Simples Puro/Híbrido",ferramentas:"Ferramentas a serem configuradas",t_simples:"Situação no Simples",anexosManual:"Anexos do Simples",atividades:"Atividades (CNAEs)",svOff:"Códigos de serviço",svExtra:"Códigos de serviço",deps:"Departamentos e responsáveis",r_prolabore:"Pró-labore",r_folha:"Folha de pagamento",r_cert:"Certificado digital",r_dominio:"Domínio",r_sintegra:"Sintegra",r_spedc:"SPED Contábil",r_spedf:"SPED Fiscal",emissao:"Emissão de notas",r_loginNfse:"Login NFS-e",r_senhaNfse:"Senha NFS-e",r_codSimples:"Código de acesso do Simples",r_sefaz:"Senha SEFAZ-ES AGV",r_cpfAdm:"CPF ADM",r_pis:"PIS",r_docs:"Documentos digitalizados",obs:"Observações"};
 function normCampo(k,o){
   if(k==="contatos") return contatosDe(o||{}).filter(c=>(c.nome||c.cargo||c.telefone||c.email||"").trim()||(c.setores||[]).length);
   let v=(o||{})[k];
