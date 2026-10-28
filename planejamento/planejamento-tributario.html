@@ -802,6 +802,8 @@ body:not(.tab-trib) #modTrib,body.client #modTrib,body.client #mainTabs{display:
 .pt-tab tr.s td{font-weight:700;background:var(--sky)}
 .pt-tab td.win{color:var(--good);font-weight:800}
 .pt-per{display:flex;gap:6px;align-items:center}
+.pt-per{flex-wrap:wrap}
+.pt-per .sel.pt-mes{width:130px}.pt-per .sel.pt-ano{width:92px}.pt-per .sel.pt-atalho{width:auto;min-width:220px}
 .pt-per input{font-family:var(--f-mono);font-size:.9rem;padding:8px 8px;border:1.5px solid var(--input-line);border-left:4px solid var(--input-edge);border-radius:6px;background:var(--input-bg);color:var(--fg);min-width:0;width:150px}
 .pt-per span{font-size:.8rem;color:var(--muted)}
 .pt-sctot{display:flex;justify-content:space-between;gap:8px;align-items:baseline;padding:8px 10px;border-radius:8px;background:var(--navy);color:var(--on-navy);font-size:.78rem}
@@ -822,7 +824,7 @@ body:not(.tab-trib) #modTrib,body.client #modTrib,body.client #mainTabs{display:
 .pt-mem .ledger{padding:12px}
 .pt-mem .ledger li{font-size:.8rem;padding:4px 0}
 .pt-tab table.pt-anos{border-top:6px solid var(--surface-2)}
-.pt-anoswrap{grid-column:1/-1}
+.pt-anoswrap{grid-column:1/-1;overflow-x:auto;min-width:0}
 .pt-anoswrap h4{margin:0 0 6px;font-size:.85rem;color:var(--navy)}
 .pt-anospar{border-collapse:collapse;font-size:.8rem}
 .pt-anospar th,.pt-anospar td{padding:4px 10px;border-bottom:1px solid var(--line);text-align:right}
@@ -867,7 +869,7 @@ body:not(.tab-trib) #modTrib,body.client #modTrib,body.client #mainTabs{display:
     <div class="btnrow"><button type="button" class="primary" id="ptPdf">Gerar PDF</button><button type="button" id="ptReset" class="cliHide">Limpar dados</button></div>
   </div>
   <div class="pt-bar">
-    <div class="field"><label>Período do cálculo</label><div class="pt-per"><input type="month" id="ptIni" min="2026-01" max="2035-12" aria-label="Competência inicial"><span>até</span><input type="month" id="ptFim" min="2026-01" max="2035-12" aria-label="Competência final"></div><span class="hint" id="ptPerInfo"></span></div>
+    <div class="field"><label>Período do cálculo</label><div class="pt-per"><select class="sel pt-mes" id="ptIniM" aria-label="Mês inicial"></select><select class="sel pt-ano" id="ptIniA" aria-label="Ano inicial"></select><span>até</span><select class="sel pt-mes" id="ptFimM" aria-label="Mês final"></select><select class="sel pt-ano" id="ptFimA" aria-label="Ano final"></select><select class="sel pt-atalho" id="ptAtalho" aria-label="Atalhos de período"></select></div><span class="hint" id="ptPerInfo"></span></div>
     <div class="field"><label>Valores informados</label><div class="pt-modo" style="min-width:210px"><label><input type="radio" name="ptPer" value="mensal"><span>Por mês</span></label><label><input type="radio" name="ptPer" value="anual"><span>Por ano</span></label></div></div>
     <div class="field"><label for="ptNovoReg">Novo cenário</label><div style="display:flex;gap:6px"><select id="ptNovoReg" class="sel"><option value="MX">Misto (cada empresa no seu regime)</option><option value="SN">Todas no Simples Nacional</option><option value="LP">Todas no Lucro Presumido</option><option value="LR">Todas no Lucro Real</option></select><button type="button" class="addbtn" id="ptAddSc">+ Cenário</button></div></div>
     <p class="pt-cbs" id="ptCbsNote" style="flex:1 1 360px;margin:0"></p>
@@ -2298,10 +2300,19 @@ body:not(.tab-trib) #modTrib,body.client #modTrib,body.client #mainTabs{display:
       ${temCusto?`<li><span class="op"></span><span>Resultado após tributos e custos<small>${esc(m.resTxt)}</small></span><span class="v">${m.resultado}</span></li>`:""}</ol></div>`).join("")).join("")).join("");
   }
   // ---------- eventos
-  const perIn=()=>{ $("ptIni").value=S.pIni; $("ptFim").value=S.pFim; }; perIn();
-  ["ptIni","ptFim"].forEach(id=>$(id).addEventListener("change",()=>{ const v=$(id).value; if(!/^\d{4}-\d{2}$/.test(v)){ perIn(); return; }
-    const c=v<"2026-01"?"2026-01":v>"2035-12"?"2035-12":v; if(id==="ptIni") S.pIni=c; else S.pFim=c; if(S.pFim<S.pIni){ const t=S.pIni; S.pIni=S.pFim; S.pFim=t; }
-    S.ano=S.pIni.slice(0,4); perIn(); save(); renderBase(); renderGrid(); render(); }));
+  // período: mês e ano em listas (2026 a 2035) + atalhos para comparar anos e acompanhar a transição
+  const MESES_P=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"], ANOS_P=[];
+  for(let y=2026;y<=2035;y++) ANOS_P.push(String(y));
+  const ATALHOS=[["","Atalhos de período…"],...ANOS_P.map(y=>[y+"-01|"+y+"-12","Ano de "+y]),["2027-01|2028-12","2027 e 2028 (CBS + IBS de teste)"],["2029-01|2032-12","2029 a 2032 (ICMS/ISS caindo)"],["2027-01|2033-12","Transição: 2027 a 2033"],["2026-01|2035-12","Tudo: 2026 a 2035"]];
+  ["ptIniM","ptFimM"].forEach(id=>$(id).innerHTML=MESES_P.map((m,i)=>`<option value="${String(i+1).padStart(2,"0")}">${m}</option>`).join(""));
+  ["ptIniA","ptFimA"].forEach(id=>$(id).innerHTML=ANOS_P.map(y=>`<option>${y}</option>`).join(""));
+  $("ptAtalho").innerHTML=ATALHOS.map(([v,t])=>`<option value="${v}">${t}</option>`).join("");
+  const perIn=()=>{ $("ptIniM").value=S.pIni.slice(5,7); $("ptIniA").value=S.pIni.slice(0,4); $("ptFimM").value=S.pFim.slice(5,7); $("ptFimA").value=S.pFim.slice(0,4);
+    const at=S.pIni+"|"+S.pFim; $("ptAtalho").value=ATALHOS.some(a=>a[0]===at)?at:""; }; perIn();
+  const perSet=(ini,fim)=>{ const lim=v=>v<"2026-01"?"2026-01":v>"2035-12"?"2035-12":v; S.pIni=lim(ini); S.pFim=lim(fim); if(S.pFim<S.pIni){ const t=S.pIni; S.pIni=S.pFim; S.pFim=t; }
+    S.ano=S.pIni.slice(0,4); perIn(); save(); renderBase(); renderGrid(); render(); };
+  ["ptIniM","ptIniA","ptFimM","ptFimA"].forEach(id=>$(id).addEventListener("change",()=>perSet($("ptIniA").value+"-"+$("ptIniM").value,$("ptFimA").value+"-"+$("ptFimM").value)));
+  $("ptAtalho").addEventListener("change",()=>{ const v=$("ptAtalho").value; if(v){ const [a,b]=v.split("|"); perSet(a,b); } });
   const perSync=()=>document.querySelectorAll('input[name="ptPer"]').forEach(i=>i.checked=i.value===S.per); perSync();
   document.querySelectorAll('input[name="ptPer"]').forEach(i=>i.addEventListener("change",()=>{ if(!i.checked||i.value===S.per) return;
     const k=i.value==="mensal"?1/12:12; MONEY.forEach(m=>{ if(S.base[m]) S.base[m]=S.base[m]*k; }); S.per=i.value; save(); renderBase(); renderGrid(); render(); }));
