@@ -826,7 +826,7 @@ function respCampo(d,ix){
     return '<div class="resp-sel"><input type="text" data-resp="'+ix+'" value="'+esc(d.resp)+'" placeholder="'+(COLABS.length?"Nome do responsável":"Responsável (cadastre em Colaboradores)")+'" aria-label="Responsável '+esc(d.nome)+'" '+dis+'>'+(COLABS.length?'<button class="btn sm link" type="button" data-respvolta="'+ix+'" '+dis+'>Escolher da lista</button>':'')+'</div>';
   const doSetor=ativos.filter(c=>(c.setores||[]).includes(d.nome)), outros=ativos.filter(c=>!(c.setores||[]).includes(d.nome));
   const atual=d.respId||((COLABS.find(c=>c.nome.toLowerCase()===String(d.resp||"").trim().toLowerCase())||{}).id)||"";
-  const opt=c=>'<option value="'+esc(c.id)+'"'+(c.id===atual?" selected":"")+'>'+esc(c.nome)+(c.cargo?" · "+esc(c.cargo):"")+'</option>';
+  const opt=c=>'<option value="'+esc(c.id)+'"'+(c.id===atual?" selected":"")+'>'+esc(c.nome)+'</option>';
   return '<div class="resp-sel"><select data-respsel="'+ix+'" aria-label="Responsável '+esc(d.nome)+'" '+dis+'><option value="">Selecionar responsável…</option>'+
     (doSetor.length?'<optgroup label="'+esc(d.nome)+'">'+doSetor.map(opt).join("")+'</optgroup>':'')+(outros.length?'<optgroup label="'+(doSetor.length?"Outros colaboradores":"Colaboradores")+'">'+outros.map(opt).join("")+'</optgroup>':'')+
     '<option value="__outro">Outro (digitar nome)</option></select></div>';
