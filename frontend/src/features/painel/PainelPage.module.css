@@ -1,0 +1,6 @@
+.grade { display: flex; flex-direction: column; gap: var(--space-5); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--space-4); }
+.duas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: var(--space-5); }
+.tres { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--space-5); }
+.filtroAno { width: 110px; }
+.filtroMes { width: 160px; }

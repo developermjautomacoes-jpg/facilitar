@@ -1,0 +1,9 @@
+.app { min-height: 100%; }
+.area { margin-left: var(--sidebar-width); min-height: 100vh; display: flex; flex-direction: column; min-width: 0; }
+.main { flex: 1; width: 100%; max-width: var(--content-max); margin: 0 auto; padding: var(--space-6); min-width: 0; }
+.veu { display: none; }
+@media (max-width: 960px) {
+  .area { margin-left: 0; }
+  .main { padding: var(--space-4); }
+  .veu { display: block; position: fixed; inset: 0; background: rgba(12, 27, 46, 0.45); z-index: calc(var(--z-sidebar) - 1); }
+}

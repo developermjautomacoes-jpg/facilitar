@@ -1,0 +1,84 @@
+/* Tokens globais: cores, fontes, espaçamentos, bordas e sombras.
+   Componentes usam apenas estas variáveis (nunca cores soltas). */
+:root {
+  /* identidade: branco, preto, azul-marinho e dourado */
+  --color-white: #ffffff;
+  --color-black: #0d1117;
+  --color-navy-900: #0c1b2e;
+  --color-navy-800: #12263f;
+  --color-navy-700: #1b3a5c;
+  --color-navy-600: #2b5a84;
+  --color-navy-100: #e6edf5;
+  --color-gold-600: #a27c2c;
+  --color-gold-500: #b8913a;
+  --color-gold-100: #f4ecd6;
+
+  /* superfícies e texto */
+  --color-bg: #eef2f6;
+  --color-surface: var(--color-white);
+  --color-surface-2: #f6f8fb;
+  --color-text: #16273a;
+  --color-text-muted: #5a6a7c;
+  --color-text-inverse: var(--color-white);
+  --color-border: #d5dde6;
+  --color-border-strong: #b9c6d4;
+  --color-grid: #e3e8ee;
+
+  /* estados */
+  --color-success: #2e7d4f;
+  --color-success-bg: #e3f3ea;
+  --color-warning: #9a6a10;
+  --color-warning-bg: #fbf1dc;
+  --color-danger: #a63a32;
+  --color-danger-bg: #f8e4e2;
+  --color-info: #1f63a8;
+  --color-info-bg: #e2edf8;
+
+  /* gráficos */
+  --chart-in: #1f63a8;
+  --chart-out: #b0781a;
+
+  /* tipografia */
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --weight-regular: 400;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* espaçamentos */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* bordas e sombras */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --border-width: 1px;
+  --shadow-sm: 0 1px 2px rgba(12, 27, 46, 0.06);
+  --shadow-md: 0 4px 16px rgba(12, 27, 46, 0.08);
+  --shadow-lg: 0 12px 40px rgba(12, 27, 46, 0.18);
+  --focus-ring: 0 0 0 3px rgba(184, 145, 58, 0.45);
+
+  /* layout */
+  --sidebar-width: 260px;
+  --header-height: 68px;
+  --content-max: 1440px;
+  --transition: 160ms ease;
+  --z-sidebar: 40;
+  --z-overlay: 50;
+  --z-toast: 60;
+}

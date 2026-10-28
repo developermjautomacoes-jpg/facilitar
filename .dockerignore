@@ -2,3 +2,5 @@
 dados
 config.php
 README.md
+frontend/node_modules
+frontend/dist

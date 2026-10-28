@@ -1,0 +1,2 @@
+.campos { display: flex; flex-direction: column; gap: var(--space-4); }
+.empresa { margin: 0; font-weight: var(--weight-semibold); }

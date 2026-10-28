@@ -1,0 +1,4 @@
+.pilha { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--space-2); max-width: min(420px, calc(100vw - 32px)); }
+.toast { background: var(--color-navy-900); color: var(--color-text-inverse); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); font-size: var(--text-sm); border-left: 4px solid var(--color-gold-500); }
+.sucesso { border-left-color: var(--color-success); }
+.erro { border-left-color: var(--color-danger); }

@@ -1,0 +1,9 @@
+.fundo { position: fixed; inset: 0; z-index: var(--z-overlay); background: rgba(12, 27, 46, 0.55); display: flex; align-items: center; justify-content: center; padding: var(--space-4); }
+.caixa { background: var(--color-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 100%; max-height: calc(100vh - 32px); display: flex; flex-direction: column; border-top: 4px solid var(--color-gold-500); }
+.sm { max-width: 420px; }
+.md { max-width: 620px; }
+.lg { max-width: 960px; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-bottom: var(--border-width) solid var(--color-border); }
+.fechar { border: 0; background: none; font-size: 26px; line-height: 1; color: var(--color-text-muted); cursor: pointer; padding: 0 4px; border-radius: var(--radius-sm); }
+.corpo { padding: var(--space-5); overflow: auto; }
+.rodape { display: flex; justify-content: flex-end; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-top: var(--border-width) solid var(--color-border); flex-wrap: wrap; }
