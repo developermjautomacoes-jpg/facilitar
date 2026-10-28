@@ -34,6 +34,20 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 .tab{appearance:none;border:0;background:none;font:600 15px var(--f-display);letter-spacing:.4px;text-transform:uppercase;color:var(--muted);padding:10px 14px;border-bottom:3px solid transparent;cursor:pointer}
 .tab[aria-selected="true"]{color:var(--navy);border-bottom-color:var(--gold)}
 .tab .count{font:600 12px var(--f-body);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:0 7px;margin-left:6px;color:var(--muted)}
+.pl-bar{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:8px 12px;align-items:end;margin:14px 0 10px}
+.pl-bar .pl-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.pl-status{grid-column:1/-1;font-size:13px;color:var(--muted,#5b6b7f)}
+.pl-status.sujo{color:#9a5b00;font-weight:600}
+.pl-lista{margin-bottom:12px}
+.pl-lista-h{display:flex;gap:8px;margin-bottom:10px}
+.pl-lista-h input{flex:1;min-width:0;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px}
+.pl-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.pl-item b{font-size:15px}
+.pl-item .pl-meta{font-size:12.5px;color:var(--muted,#5b6b7f)}
+.pl-item .pl-res{grid-column:1/-1;font-size:13px}
+.pl-item .pl-bts{display:flex;gap:6px;align-items:start}
+.pl-item.atual{background:rgba(196,154,60,.08)}
+@media (max-width:640px){.pl-bar{grid-template-columns:1fr}.pl-item{grid-template-columns:1fr}}
 .notice{margin-top:14px;padding:10px 14px;border:1px solid var(--line);border-left:4px solid var(--warn);background:var(--surface);border-radius:6px;font-size:14px}
 .notice.info{border-left-color:var(--blue)}
 .grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,560px);gap:24px;margin-top:18px;align-items:start}
@@ -279,6 +293,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
       <button class="tab" role="tab" id="tab-colab" aria-selected="false" data-view="colab">Colaboradores</button>
       <button class="tab" role="tab" id="tab-cfg" aria-selected="false" data-view="config" hidden>Configurações</button>
       <button class="tab" role="tab" id="tab-arq" aria-selected="false" data-view="arquivo">Arquivo <span class="count" id="countArq">0</span></button>
+      <button class="tab" role="tab" id="tab-planej" aria-selected="false" data-view="planej">Planejamento tributário</button>
     </nav>
   </header>
   <div id="dbNotice" class="notice" hidden></div>
@@ -546,6 +561,26 @@ body.locked .wrap,body.locked .toast{display:none!important}
         <p class="small muted" style="margin-top:12px">A SEFAZ-ES confere o CNPJ de quem consulta. Um e-CPF pode receber "Rejeição 257 – solicitante não habilitado"; nesse caso use o e-CNPJ de uma empresa habilitada a emitir NF-e no ES.</p>
       </section>
     </div>
+  </div>
+
+  <!-- ===================== PLANEJAMENTO TRIBUTÁRIO ===================== -->
+  <div id="view-planej" hidden>
+    <div class="pl-bar">
+      <div class="f pl-nome"><label for="pl_cliente">Cliente / nome do planejamento</label><input type="text" id="pl_cliente" maxlength="120" placeholder="Ex.: Empresa X — abertura de 3ª empresa"></div>
+      <div class="pl-acoes">
+        <button class="btn primary" id="plSalvar" type="button">Salvar</button>
+        <button class="btn" id="plSalvarNovo" type="button">Salvar como novo</button>
+        <button class="btn" id="plNovo" type="button">Novo</button>
+        <button class="btn" id="plAbrirLista" type="button">Planejamentos salvos <span class="count" id="plCount">0</span></button>
+      </div>
+      <div class="pl-status" id="plStatus">Planejamento novo, ainda não salvo.</div>
+    </div>
+    <div class="pl-lista card" id="plLista" hidden>
+      <div class="pl-lista-h"><input type="search" id="pl_busca" placeholder="Pesquisar por cliente, resultado ou responsável"><button class="btn" id="plFechar" type="button">Fechar</button></div>
+      <div id="plItens"></div>
+    </div>
+    <div id="planejMsg" class="notice" hidden></div>
+    <iframe id="planejFrame" title="Planejamento tributário" style="width:100%;height:calc(100vh - 150px);min-height:720px;border:0;border-radius:12px;background:#fff"></iframe>
   </div>
 
   <div id="view-arquivo" hidden>
@@ -1927,8 +1962,76 @@ async function painelPdf(){
 function showView(vw){
   $("view-novo").hidden=vw!=="novo";$("view-arquivo").hidden=vw!=="arquivo";$("view-painel").hidden=vw!=="painel";$("view-config").hidden=vw!=="config";$("tab-cfg").setAttribute("aria-selected",vw==="config");$("view-colab").hidden=vw!=="colab";$("tab-colab").setAttribute("aria-selected",vw==="colab");
   $("tab-novo").setAttribute("aria-selected",vw==="novo");$("tab-arq").setAttribute("aria-selected",vw==="arquivo");$("tab-painel").setAttribute("aria-selected",vw==="painel");
-  if(vw==="arquivo")renderLista(); else if(vw==="painel")renderPainel(); else if(vw==="config")carregarCerts(); else if(vw==="colab")renderColabs(); else schedulePreview();
+  $("view-planej").hidden=vw!=="planej";$("tab-planej").setAttribute("aria-selected",vw==="planej");
+  if(vw==="planej")carregarPlanej(); else if(vw==="arquivo")renderLista(); else if(vw==="painel")renderPainel(); else if(vw==="config")carregarCerts(); else if(vw==="colab")renderColabs(); else schedulePreview();
 }
+
+/* ---------- planejamento tributário (página servida pelo api.php só para quem entrou com a senha) ---------- */
+let PLANEJ_OK=false, PLANEJ_HTML="", PLAN_ATUAL=null, PLAN_SUJO=false, PLANS=[];
+const PLAN_KEY="facilitar-planej-trib-v2";   // onde o simulador guarda o estado (mesma origem do iframe)
+async function carregarPlanej(){
+  if(PLANEJ_OK) return;
+  const msg=$("planejMsg");
+  if(MODO!=="api"){ msg.hidden=false; msg.textContent="O planejamento tributário fica disponível no sistema hospedado (com o api.php no servidor)."; return; }
+  msg.hidden=false; msg.textContent="Carregando o planejamento tributário…";
+  try{ const j=await api("planejamento"); PLANEJ_HTML=j.html; $("planejFrame").srcdoc=PLANEJ_HTML; PLANEJ_OK=true; msg.hidden=true; listarPlans(); }
+  catch(e){ msg.hidden=false; msg.textContent="Não foi possível abrir o planejamento tributário: "+e.message; }
+}
+function planStatus(){
+  const st=$("plStatus");
+  if(!PLAN_ATUAL){ st.textContent=PLAN_SUJO?"Planejamento novo, ainda não salvo.":"Planejamento novo, ainda não salvo."; st.className="pl-status"+(PLAN_SUJO?" sujo":""); return; }
+  st.textContent=(PLAN_SUJO?"Alterações não salvas · ":"")+"Editando \""+PLAN_ATUAL.cliente+"\" · salvo em "+fmtDH(PLAN_ATUAL.atualizadoEm)+(PLAN_ATUAL.atualizadoPor?" por "+PLAN_ATUAL.atualizadoPor:"");
+  st.className="pl-status"+(PLAN_SUJO?" sujo":"");
+}
+function fmtDH(iso){ try{ const d=new Date(iso); return d.toLocaleDateString("pt-BR")+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return iso||""; } }
+function recarregarSimulador(){ $("planejFrame").srcdoc=PLANEJ_HTML; }
+function resumoPlan(){ try{ const d=$("planejFrame").contentWindow.document, h=d.querySelector("#ptRes h3"), ey=d.querySelector("#ptRes .eyebrow"); return ((ey?ey.textContent+": ":"")+(h?h.textContent:"")).slice(0,400); }catch(e){ return ""; } }
+async function listarPlans(){
+  try{ const j=await api("planlistar"); PLANS=j.planejamentos||[]; $("plCount").textContent=PLANS.length; renderPlans(); }
+  catch(e){ toast("Não foi possível listar os planejamentos: "+e.message); }
+}
+function renderPlans(){
+  const q=($("pl_busca").value||"").toLowerCase(), it=PLANS.filter(p=>!q||[p.cliente,p.resumo,p.criadoPor,p.atualizadoPor].join(" ").toLowerCase().includes(q));
+  $("plItens").innerHTML=it.length?it.map(p=>'<div class="pl-item'+(PLAN_ATUAL&&PLAN_ATUAL.id===p.id?" atual":"")+'"><div><b>'+esc(p.cliente||"(sem nome)")+'</b><div class="pl-meta">Atualizado em '+esc(fmtDH(p.atualizadoEm))+(p.atualizadoPor?" por "+esc(p.atualizadoPor):"")+' · criado em '+esc(fmtDH(p.criadoEm))+(p.criadoPor?" por "+esc(p.criadoPor):"")+'</div></div><div class="pl-bts"><button class="btn" type="button" data-plab="'+esc(p.id)+'">Abrir</button><button class="btn" type="button" data-plex="'+esc(p.id)+'">Excluir</button></div>'+(p.resumo?'<div class="pl-res">'+esc(p.resumo)+'</div>':'')+'</div>').join(""):'<p class="small">Nenhum planejamento salvo'+(q?" para essa pesquisa":"")+'.</p>';
+  $("plItens").querySelectorAll("[data-plab]").forEach(b=>b.onclick=()=>abrirPlan(b.dataset.plab));
+  $("plItens").querySelectorAll("[data-plex]").forEach(b=>b.onclick=()=>excluirPlan(b.dataset.plex));
+}
+async function salvarPlan(comoNovo){
+  const cli=$("pl_cliente").value.trim();
+  if(!cli){ $("pl_cliente").focus(); toast("Informe o cliente / nome do planejamento."); return; }
+  let estado=null; try{ estado=JSON.parse(lsGet(PLAN_KEY)||"null"); }catch(e){}
+  if(!estado){ toast("Preencha o planejamento antes de salvar."); return; }
+  try{
+    const j=await api("plansalvar",{id:comoNovo||!PLAN_ATUAL?null:PLAN_ATUAL.id,cliente:cli,resumo:resumoPlan(),estado,usuario:(CRED&&CRED.nome)||""});
+    PLAN_ATUAL=j.planejamento; PLAN_SUJO=false; planStatus(); toast("Planejamento salvo."); listarPlans();
+  }catch(e){ toast("Não foi possível salvar: "+e.message); }
+}
+async function abrirPlan(id){
+  if(PLAN_SUJO&&!confirm("Há alterações não salvas no planejamento aberto. Abrir outro mesmo assim?")) return;
+  try{
+    const j=await api("planler&id="+encodeURIComponent(id)), p=j.planejamento;
+    lsSet(PLAN_KEY,JSON.stringify(p.estado)); PLAN_ATUAL=p; PLAN_SUJO=false; $("pl_cliente").value=p.cliente||"";
+    recarregarSimulador(); planStatus(); $("plLista").hidden=true; renderPlans();
+  }catch(e){ toast("Não foi possível abrir: "+e.message); }
+}
+async function excluirPlan(id){
+  const p=PLANS.find(x=>x.id===id); if(!confirm("Excluir o planejamento \""+((p&&p.cliente)||id)+"\"? Essa ação não pode ser desfeita.")) return;
+  try{ await api("planexcluir",{id,usuario:(CRED&&CRED.nome)||""}); if(PLAN_ATUAL&&PLAN_ATUAL.id===id){ PLAN_ATUAL=null; planStatus(); } toast("Planejamento excluído."); listarPlans(); }
+  catch(e){ toast("Não foi possível excluir: "+e.message); }
+}
+function novoPlan(){
+  if(PLAN_SUJO&&!confirm("Há alterações não salvas. Começar um planejamento novo mesmo assim?")) return;
+  lsDel(PLAN_KEY); PLAN_ATUAL=null; PLAN_SUJO=false; $("pl_cliente").value=""; recarregarSimulador(); planStatus(); renderPlans();
+}
+$("plSalvar").onclick=()=>salvarPlan(false);
+$("plSalvarNovo").onclick=()=>salvarPlan(true);
+$("plNovo").onclick=novoPlan;
+$("plAbrirLista").onclick=()=>{ $("plLista").hidden=!$("plLista").hidden; if(!$("plLista").hidden){ listarPlans(); $("pl_busca").focus(); } };
+$("plFechar").onclick=()=>{ $("plLista").hidden=true; };
+$("pl_busca").oninput=renderPlans;
+$("pl_cliente").oninput=()=>{ if(PLAN_ATUAL){ PLAN_SUJO=true; planStatus(); } };
+// o simulador grava o estado no localStorage a cada alteração; o evento "storage" chega aqui por ser outro documento da mesma origem
+window.addEventListener("storage",e=>{ if(e.key===PLAN_KEY&&PLANEJ_OK){ PLAN_SUJO=true; planStatus(); } });
 
 /* ---------- eventos ---------- */
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>showView(t.dataset.view));

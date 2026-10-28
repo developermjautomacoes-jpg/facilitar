@@ -5,6 +5,10 @@ FROM php:8.3-apache
 COPY index.html api.php /var/www/html/
 COPY index.html api.php /var/www/html/memorandos/
 
+# Planejamento tributário: fora da pasta pública; o api.php entrega a página só para quem entrou com a senha
+COPY planejamento/planejamento-tributario.html /opt/planejamento/planejamento-tributario.html
+ENV PLANEJ_HTML=/opt/planejamento/planejamento-tributario.html
+
 # Certificados A1 antigos (.pfx com RC2/3DES) precisam do provedor "legacy" do OpenSSL 3
 RUN if ls /usr/lib/*/ossl-modules/legacy.so >/dev/null 2>&1; then \
       printf 'openssl_conf = openssl_init\n[openssl_init]\nproviders = provider_sect\n[provider_sect]\ndefault = default_sect\nlegacy = legacy_sect\n[default_sect]\nactivate = 1\n[legacy_sect]\nactivate = 1\n' > /etc/ssl/openssl-memorandos.cnf; \
