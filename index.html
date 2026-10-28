@@ -255,7 +255,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
 .trow .c{white-space:nowrap}
 .trow.sv{grid-template-columns:44px minmax(0,1fr) 54px}
 .trow.dp{grid-template-columns:170px minmax(0,1fr)}
-.trow.so{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 70px}
+.trow.so{grid-template-columns:minmax(0,1.4fr) 112px minmax(0,1fr) 66px}
 .trow.ct{grid-template-columns:minmax(0,1.2fr) 96px minmax(0,1.3fr) minmax(0,1fr)}
 .trow .c{font-variant-numeric:tabular-nums;font-weight:600}
 .trow b{font-weight:700}
@@ -337,7 +337,7 @@ body.locked .wrap,body.locked .toast{display:none!important}
             <div class="f"><label for="e_im">Inscrição municipal</label><input type="text" id="e_im"></div>
             <div class="f wide"><label for="e_endereco">Endereço</label><input type="text" id="e_endereco"></div>
             <div class="f wide"><span class="lbl">Quadro societário</span>
-              <div class="tbl-wrap" style="margin-top:4px"><table class="t"><thead><tr><th>Nome</th><th>Qualificação</th><th>Entrada</th><th></th></tr></thead><tbody id="sociosBody"></tbody></table></div>
+              <div class="tbl-wrap" style="margin-top:4px"><table class="t"><thead><tr><th>Nome</th><th>CPF / CNPJ</th><th>Qualificação</th><th>Entrada</th><th></th></tr></thead><tbody id="sociosBody"></tbody></table></div>
               <div class="row" style="margin-top:6px"><button class="btn sm" id="btnAddSocio" type="button">+ Adicionar sócio</button></div>
             </div>
             <div class="f"><label for="e_tel">Telefone da empresa</label><input type="text" id="e_tel"></div>
@@ -751,7 +751,7 @@ function setForm(d){
   S.emissao=[...(d.emissao||[])];
   S.contatos=contatosDe(d);
   S.ferramentas=[...(d.ferramentas||[])];
-  S.socios=(d.socios||[]).map(x=>({nome:"",qualificacao:"",entrada:"",...x}));
+  S.socios=(d.socios||[]).map(x=>({nome:"",cpf:"",qualificacao:"",entrada:"",...x}));
   $("m_numero").value = d.m_numero!=null ? d.m_numero : (d.seq&&d.ano&&S.docId ? numeroTxt(d.seq,d.ano) : "");
   renderAll();
 }
@@ -857,14 +857,23 @@ function renderEmissao(){
     else S.emissao=S.emissao.filter(x=>x!==e);
     renderEmissao();changed()});
 }
+function mesclarSocios(novos,antigos){const por={};(antigos||[]).forEach(a=>{por[String(a.nome||"").trim().toUpperCase()]=a});
+  return novos.map(n=>{const a=por[String(n.nome||"").trim().toUpperCase()];return {...n,cpf:(a&&a.cpf)||n.cpf||""}})}
+function cpfValido(c){c=dig(c);if(c.length!==11||/^(\d)\1+$/.test(c))return false;for(let t=9;t<11;t++){let s=0;for(let i=0;i<t;i++)s+=+c[i]*(t+1-i);if((s*10%11)%10!==+c[t])return false}return true}
+function cnpjValido(c){c=dig(c);if(c.length!==14||/^(\d)\1+$/.test(c))return false;const calc=n=>{let s=0,p=n-7;for(let i=0;i<n;i++){s+=+c[i]*p--;if(p<2)p=9}const r=s%11;return r<2?0:11-r};return calc(12)===+c[12]&&calc(13)===+c[13]}
+function docValido(v){const d=dig(v);return d.length===11?cpfValido(d):d.length===14?cnpjValido(d):false}
+function fmtDoc(v){const d=dig(v);if(d.length===11)return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/,"$1.$2.$3-$4");if(d.length===14)return fmtCnpj(d);return String(v||"").trim()}
+function cpfMascarado(v){const s=String(v||"");if(!/\d/.test(s))return "";const d=s.replace(/[^\d*]/g,"");return d.length===11?d.slice(0,3)+"."+d.slice(3,6)+"."+d.slice(6,9)+"-"+d.slice(9):s}
 function renderSocios(){
   const tb=$("sociosBody");
-  if(!S.socios.length){tb.innerHTML='<tr><td colspan="4" class="muted">Sem sócios informados. A consulta do CNPJ preenche o quadro.</td></tr>';return}
+  if(!S.socios.length){tb.innerHTML='<tr><td colspan="5" class="muted">Sem sócios informados. A consulta do CNPJ preenche o quadro.</td></tr>';return}
   tb.innerHTML=S.socios.map((x,ix)=>'<tr><td><input type="text" id="so_nome_'+ix+'" data-so="'+ix+'" data-k="nome" value="'+esc(x.nome)+'" aria-label="Nome do sócio"></td>'+
+    '<td style="width:170px"><input type="text" id="so_cpf_'+ix+'" data-so="'+ix+'" data-k="cpf" value="'+esc(x.cpf)+'" inputmode="numeric" placeholder="'+esc(x.cpfReceita||"000.000.000-00")+'" aria-label="CPF ou CNPJ do sócio"'+(x.cpf&&!docValido(x.cpf)?' style="border-color:var(--bad)" title="CPF/CNPJ inválido"':'')+'></td>'+
     '<td><input type="text" id="so_q_'+ix+'" data-so="'+ix+'" data-k="qualificacao" value="'+esc(x.qualificacao)+'" aria-label="Qualificação"></td>'+
     '<td style="width:150px"><input type="date" id="so_e_'+ix+'" data-so="'+ix+'" data-k="entrada" value="'+esc(x.entrada)+'" aria-label="Data de entrada"></td>'+
     '<td><button class="btn sm link" type="button" data-sodel="'+ix+'" aria-label="Remover sócio">✕</button></td></tr>').join("");
   tb.querySelectorAll("[data-so]").forEach(inp=>inp.oninput=()=>{S.socios[+inp.dataset.so][inp.dataset.k]=inp.value;changed()});
+  tb.querySelectorAll('[data-k="cpf"]').forEach(inp=>inp.onblur=()=>{const v=fmtDoc(inp.value);S.socios[+inp.dataset.so].cpf=v;inp.value=v;const ok=!v||docValido(v);inp.style.borderColor=ok?"":"var(--bad)";inp.title=ok?"":"CPF/CNPJ inválido";changed()});
   tb.querySelectorAll("[data-sodel]").forEach(b=>b.onclick=()=>{S.socios.splice(+b.dataset.sodel,1);renderSocios();changed()});
 }
 function renderContatos(){
@@ -928,7 +937,8 @@ function normalizar(j){
     o.endereco=[log+(j.numero?", "+j.numero:""), j.complemento, j.bairro, (j.municipio||"")+(j.uf?"/"+j.uf:""), j.cep?"CEP "+fmtCep(j.cep):""].filter(x=>x&&String(x).trim()).join(" – ");
     o.tel=[j.ddd_telefone_1,j.ddd_telefone_2].filter(x=>dig(x).length>=10).map(fmtTel).join(" / ");
     o.email=(j.email||"").toLowerCase();
-    o.socios=(j.qsa||[]).map(x=>({nome:x.nome_socio||"",qualificacao:x.qualificacao_socio||"",entrada:isoFromBr(x.data_entrada_sociedade||"")})).filter(x=>x.nome);
+    o.socios=(j.qsa||[]).map(x=>{const doc=String(x.cnpj_cpf_do_socio||"");const cheio=dig(doc).length===14&&!doc.includes("*");
+      return {nome:x.nome_socio||"",cpf:cheio?fmtCnpj(doc):"",cpfReceita:cheio?"":cpfMascarado(doc),qualificacao:x.qualificacao_socio||"",entrada:isoFromBr(x.data_entrada_sociedade||"")}}).filter(x=>x.nome);
     o.cnaes=[]; if(j.cnae_fiscal) o.cnaes.push({cod:pad(dig(j.cnae_fiscal),7),desc:j.cnae_fiscal_descricao||"",tipo:"Principal"});
     (j.cnaes_secundarios||[]).forEach(c=>{if(+dig(c.codigo)>0)o.cnaes.push({cod:pad(dig(c.codigo),7),desc:c.descricao||"",tipo:"Secundária"})});
     if(j.opcao_pelo_mei===true){o.simples="Optante pelo SIMEI"+(j.data_opcao_pelo_mei?" desde "+br(j.data_opcao_pelo_mei):"");o.regime="MEI (SIMEI)"}
@@ -947,7 +957,7 @@ function normalizar(j){
     o.situacao=j.situacao||""; o.natureza=j.natureza_juridica||""; o.capital=j.capital_social?fmtMoeda(parseFloat(j.capital_social)):"";
     o.endereco=[(j.logradouro||"")+(j.numero?", "+j.numero:""), j.complemento, j.bairro, (j.municipio||"")+(j.uf?"/"+j.uf:""), j.cep?"CEP "+fmtCep(j.cep):""].filter(x=>x&&String(x).trim()).join(" – ");
     o.tel=j.telefone||""; o.email=(j.email||"").toLowerCase();
-    o.socios=(j.qsa||[]).map(x=>({nome:x.nome||"",qualificacao:String(x.qual||"").replace(/^\d+-/,""),entrada:""})).filter(x=>x.nome);
+    o.socios=(j.qsa||[]).map(x=>({nome:x.nome||"",cpf:"",qualificacao:String(x.qual||"").replace(/^\d+-/,""),entrada:""})).filter(x=>x.nome);
     o.cnaes=[]; (j.atividade_principal||[]).forEach(c=>{if(+dig(c.code)>0)o.cnaes.push({cod:pad(dig(c.code),7),desc:c.text||"",tipo:"Principal"})});
     (j.atividades_secundarias||[]).forEach(c=>{if(+dig(c.code)>0)o.cnaes.push({cod:pad(dig(c.code),7),desc:c.text||"",tipo:"Secundária"})});
     if(j.simei&&j.simei.optante){o.simples="Optante pelo SIMEI";o.regime="MEI (SIMEI)"}
@@ -961,7 +971,7 @@ function aplicarConsulta(o){
   set("e_razao",o.razao);set("e_fantasia",o.fantasia);set("e_cnpj",o.cnpj);set("e_abertura",o.abertura);set("e_situacao",o.situacao);
   set("e_natureza",o.natureza);set("e_capital",o.capital);set("e_endereco",o.endereco);set("e_tel",o.tel);set("e_email",o.email);set("t_simples",o.simples);
   if(o.regime)$("t_regime").value=o.regime;
-  if(o.socios&&o.socios.length) S.socios=o.socios;
+  if(o.socios&&o.socios.length) S.socios=mesclarSocios(o.socios,S.socios);
   if(o.cnaes&&o.cnaes.length){S.atividades=o.cnaes.map(c=>({...c,on:true}));S.svOff={};S.anexosManual=null}
   renderAll();changed();
   const anx=anexosAtuais();
@@ -1056,7 +1066,7 @@ async function aplicarAtualizacao(salvarJa){
   const marc=[...document.querySelectorAll("[data-atu]")].filter(c=>c.checked).map(c=>ATU[+c.dataset.atu]);
   if(!marc.length){toast("Marque ao menos um item.");return}
   marc.forEach(x=>{
-    if(x.k==="socios") S.socios=x.valor.map(v=>({...v}));
+    if(x.k==="socios") S.socios=mesclarSocios(x.valor,S.socios);
     else if(x.k==="atividades"){const prev={};S.atividades.forEach(a=>prev[pad(dig(a.cod),7)]=a);S.atividades=x.valor.map(c=>({...c,on:prev[c.cod]?prev[c.cod].on:true}));S.anexosManual=null}
     else $(x.k).value=x.valor;
   });
@@ -1148,7 +1158,7 @@ function dadosMemo(d){
   return {ano,seq,reg,atv,sv,anx,fr};
 }
 /* Conteúdo do memorando em itens neutros: a prévia (HTML) e o PDF (texto) são desenhados a partir dele */
-const TAB_COLS={so:[.5,.36,.14],ct:[.29,.17,.31,.23],at:[.12,.6,.1,.18],sv:[.1,.75,.15],dp:[.32,.68]};
+const TAB_COLS={so:[.38,.2,.28,.14],ct:[.29,.17,.31,.23],at:[.12,.6,.1,.18],sv:[.1,.75,.15],dp:[.32,.68]};
 function modeloMemo(d){
   const m=dadosMemo(d), I=[], val=x=>{x=(x==null?"":String(x)).trim();return x||"—"};
   I.push({t:"head",num:"Nº "+numeroTxt(m.seq,m.ano),cancel:d.status==="cancelado",data:"Em "+(extenso(d.m_data)||""),setores:listaSetores(d.deps||[]),setoresOn:(d.deps||[]).some(x=>x.on),saud:(d.deps||[]).filter(x=>x.on).length===1?"Ao setor":"Aos setores",assunto:val(d.m_assunto)});
@@ -1163,7 +1173,7 @@ function modeloMemo(d){
   I.push({t:"kv2",a:["Telefone da empresa",val(d.e_tel)],b:["E-mail da empresa",val(d.e_email)]});
   const socs=(d.socios||[]).filter(x=>(x.nome||"").trim());
   if(socs.length){I.push({t:"sec",title:"Quadro societário",extra:socs.length+" sócio"+(socs.length>1?"s":"")});
-    I.push({t:"tab",k:"so",head:["Nome","Qualificação","Entrada"],bold:[0],num:[2],rows:socs.map(x=>[val(x.nome),val(x.qualificacao),val(br(x.entrada))])})}
+    I.push({t:"tab",k:"so",head:["Nome","CPF / CNPJ","Qualificação","Entrada"],bold:[0],num:[1,3],rows:socs.map(x=>[val(x.nome),val(x.cpf),val(x.qualificacao),val(br(x.entrada))])})}
   const cts=contatosDe(d).filter(c=>(c.nome||c.telefone||c.email||"").trim());
   if(cts.length){I.push({t:"sec",title:"Contatos da empresa",extra:cts.length+" contato"+(cts.length>1?"s":"")});
     I.push({t:"tab",k:"ct",head:["Nome / cargo","Telefone","E-mail","Setores"],bold:[0],num:[1],rows:cts.map(c=>[{txt:val(c.nome),sub:c.cargo||""},val(c.telefone),val(c.email),val((c.setores||[]).join(", "))])})}
@@ -1384,7 +1394,7 @@ async function gerarDOCX(d){
   b+=wsec("Dados da empresa");
   [["Nome",d.e_razao],["Nome fantasia",d.e_fantasia],["CNPJ",d.e_cnpj],["Abertura",br(d.e_abertura)],["Cliente desde",br(d.e_desde)],["Situação",d.e_situacao],["NIRE",d.e_nire],["Capital social",d.e_capital],["Inscrição estadual",d.e_ie],["Inscrição municipal",d.e_im],["Natureza jurídica",d.e_natureza],["Endereço",d.e_endereco],["Telefone da empresa",d.e_tel],["E-mail da empresa",d.e_email]].forEach(x=>{if(x[0]!=="Natureza jurídica"||x[1])b+=wkv(x[0],x[1])});
   const socW=(d.socios||[]).filter(x=>(x.nome||"").trim());
-  if(socW.length){b+=wsec("Quadro societário");b+=wtable(["Nome","Qualificação","Entrada"],socW.map(x=>[x.nome,x.qualificacao||"—",br(x.entrada)||"—"]),[W-3000-1300,3000,1300])}
+  if(socW.length){b+=wsec("Quadro societário");b+=wtable(["Nome","CPF / CNPJ","Qualificação","Entrada"],socW.map(x=>[x.nome,x.cpf||"—",x.qualificacao||"—",br(x.entrada)||"—"]),[W-2000-2600-1300,2000,2600,1300])}
   const ctsW=contatosDe(d).filter(c=>(c.nome||c.telefone||c.email||"").trim());
   if(ctsW.length){b+=wsec("Contatos da empresa");b+=wtable(["Nome","Cargo","Telefone","E-mail","Setores"],ctsW.map(c=>[c.nome||"—",c.cargo||"—",c.telefone||"—",c.email||"—",(c.setores||[]).join(", ")||"—"]),[1900,1300,1500,W-1900-1300-1500-1700,1700])}
   b+=wsec("Tributação");
@@ -1430,7 +1440,7 @@ function normCampo(k,o){
   if(k==="layout") return String(v||"1");
   if(k==="deps") v=(v||[]).filter(x=>x.on||(x.resp||"").trim()).map(x=>({nome:x.nome,on:!!x.on,resp:(x.resp||"").trim()}));
   if(k==="atividades") v=(v||[]).map(x=>({cod:pad(dig(x.cod),7),on:x.on!==false}));
-  if(k==="socios") v=(v||[]).filter(x=>(x.nome||"").trim()).map(x=>({nome:(x.nome||"").trim(),qualificacao:(x.qualificacao||"").trim(),entrada:x.entrada||""}));
+  if(k==="socios") v=(v||[]).filter(x=>(x.nome||"").trim()).map(x=>({nome:(x.nome||"").trim(),cpf:dig(x.cpf),qualificacao:(x.qualificacao||"").trim(),entrada:x.entrada||""}));
   if(v==null||v==="") return "";
   if(typeof v==="string") return v.trim();
   if(Array.isArray(v)&&!v.length) return "";
@@ -1468,7 +1478,7 @@ function renderHist(){
 }
 
 /* ---------- arquivo (db) ---------- */
-function textoBusca(d){return [numeroTxt(d.seq,d.ano),d.e_razao,d.e_fantasia,d.e_cnpj,dig(d.e_cnpj),d.t_regime,(d.deps||[]).map(x=>x.nome+" "+x.resp).join(" "),(d.atividades||[]).map(a=>fmtCnae(a.cod)).join(" "),contatosDe(d).map(c=>[c.nome,c.cargo,c.email,dig(c.telefone)].join(" ")).join(" "),(d.socios||[]).map(x=>x.nome).join(" ")].join(" ").toLowerCase()}
+function textoBusca(d){return [numeroTxt(d.seq,d.ano),d.e_razao,d.e_fantasia,d.e_cnpj,dig(d.e_cnpj),d.t_regime,(d.deps||[]).map(x=>x.nome+" "+x.resp).join(" "),(d.atividades||[]).map(a=>fmtCnae(a.cod)).join(" "),contatosDe(d).map(c=>[c.nome,c.cargo,c.email,dig(c.telefone)].join(" ")).join(" "),(d.socios||[]).map(x=>x.nome+" "+dig(x.cpf)).join(" ")].join(" ").toLowerCase()}
 async function salvar(){
   if(MODO==="api") return salvarAPI();
   if(!DB){toast("O arquivo não está disponível nesta visualização.");return}
@@ -1476,6 +1486,8 @@ async function salvar(){
   if(!d.e_razao.trim()||dig(d.e_cnpj).length!==14){toast("Preencha a razão social e o CNPJ antes de salvar.");return}
   if(!d.t_regime){toast("Informe a opção tributária (Simples, Lucro Presumido, Lucro Real Trimestral ou Anual).");$("t_regime").focus();return}
   if(d.t_regime==="Simples Nacional"&&!d.t_modalidade){toast("Informe se o Simples é Puro ou Híbrido.");$("t_modalidade").focus();return}
+  const cpfRuim=(d.socios||[]).find(x=>x.cpf&&!docValido(x.cpf));
+  if(cpfRuim){toast("CPF/CNPJ inválido para o sócio "+(cpfRuim.nome||"")+". Corrija ou deixe em branco.");return}
   const numTxt=$("m_numero").value.trim(), pm=parseNum(numTxt);
   if(numTxt&&!pm){toast("Número inválido. Use o formato 05/2026.");return}
   const btn=$("btnSalvar");btn.disabled=true;btn.textContent="Salvando…";
@@ -1558,6 +1570,8 @@ async function salvarAPI(){
   if(!d.e_razao.trim()||dig(d.e_cnpj).length!==14){toast("Preencha a razão social e o CNPJ antes de salvar.");return}
   if(!d.t_regime){toast("Informe a opção tributária (Simples, Lucro Presumido, Lucro Real Trimestral ou Anual).");$("t_regime").focus();return}
   if(d.t_regime==="Simples Nacional"&&!d.t_modalidade){toast("Informe se o Simples é Puro ou Híbrido.");$("t_modalidade").focus();return}
+  const cpfRuim=(d.socios||[]).find(x=>x.cpf&&!docValido(x.cpf));
+  if(cpfRuim){toast("CPF/CNPJ inválido para o sócio "+(cpfRuim.nome||"")+". Corrija ou deixe em branco.");return}
   const numTxt=$("m_numero").value.trim(), pm=parseNum(numTxt);
   if(numTxt&&!pm){toast("Número inválido. Use o formato 05/2026.");return}
   const btn=$("btnSalvar");btn.disabled=true;btn.textContent="Salvando…";
@@ -1944,7 +1958,7 @@ $("vwEdit").onclick=()=>{const id=vwId;fecharViewer();abrirDoc(id)};
 $("vwPdf").onclick=()=>{const d=ARQ.find(x=>x._id===vwId);if(d)gerarPDF(d)};
 $("vwDocx").onclick=()=>{const d=ARQ.find(x=>x._id===vwId);if(d)gerarDOCX(d)};
 $("btnCertImportar").onclick=importarCert;
-$("btnAddSocio").onclick=()=>{S.socios.push({nome:"",qualificacao:"",entrada:""});renderSocios();changed();setTimeout(()=>{const el=$("so_nome_"+(S.socios.length-1));if(el)el.focus()},30)};
+$("btnAddSocio").onclick=()=>{S.socios.push({nome:"",cpf:"",qualificacao:"",entrada:""});renderSocios();changed();setTimeout(()=>{const el=$("so_nome_"+(S.socios.length-1));if(el)el.focus()},30)};
 $("btnAddContato").onclick=()=>{S.contatos.push(contatoVazio());renderContatos();changed();const ix=S.contatos.length-1;setTimeout(()=>{const el=$("ct_nome_"+ix);if(el)el.focus()},30)};
 $("btnAddDep").onclick=()=>{const n=$("addDep").value.trim();if(!n)return;S.deps.push({nome:n,on:true,resp:""});$("addDep").value="";renderDeps();changed()};
 $("btnSalvar").onclick=salvar;
