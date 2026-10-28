@@ -174,3 +174,38 @@ body.embed-trib .pt-cbs { border-radius: var(--radius-md); }
 body.embed-trib .pt-warn { border-radius: var(--radius-sm); }
 body.embed-trib .pt-reg { border-radius: var(--radius-pill); padding: 3px 10px; }
 body.embed-trib .tabs button { border-radius: 0; }
+
+/* simulador: tipografia e controles iguais aos do sistema */
+body.embed-trib .ctl input,
+body.embed-trib .sel,
+body.embed-trib .pt-per input,
+body.embed-trib .pt-par td input,
+body.embed-trib .ctl span {
+  font-family: var(--font-body) !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+}
+body.embed-trib .sel { padding: 9px 12px; font-size: var(--text-sm); background-color: var(--color-surface); }
+body.embed-trib .pt-per input {
+  width: 190px;
+  padding: 9px 12px;
+  font-size: var(--text-sm);
+  border: var(--border-width) solid var(--color-border) !important;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+body.embed-trib .pt-per input:focus { outline: none; border-color: var(--color-gold-500) !important; box-shadow: var(--focus-ring); }
+body.embed-trib .pt-par td input { border: var(--border-width) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); padding: 6px 8px; }
+body.embed-trib .addbtn { border-style: solid; background: var(--color-surface); }
+body.embed-trib .addbtn:hover { background: var(--color-navy-100); }
+body.embed-trib .pt-cbs { background: var(--color-navy-100); color: var(--color-navy-800); border: var(--border-width) solid var(--color-border); padding: var(--space-3) var(--space-4); }
+body.embed-trib .field label,
+body.embed-trib .pt-bar .field > label,
+body.embed-trib .pt-bgrid .field label { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); }
+/* o título da página já está no cabeçalho do sistema: aqui fica só a barra de ações */
+body.embed-trib #modTrib > .sectionhead .eyebrow,
+body.embed-trib #modTrib > .sectionhead h2,
+body.embed-trib #modTrib > .sectionhead p { display: none; }
+body.embed-trib #modTrib > .sectionhead { justify-content: flex-end; }
+@media (max-width: 560px) { body.embed-trib .pt-per input { width: 100%; } body.embed-trib .pt-per { flex-wrap: wrap; } }
+body.embed-trib .pt-modo label { text-transform: none; letter-spacing: 0; font-size: inherit; color: inherit; }
