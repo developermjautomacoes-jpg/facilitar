@@ -27,8 +27,10 @@ if (SENHA_ACESSO === 'TROQUE-ESTA-SENHA') {
     sai(500, ['erro' => 'Defina a senha de acesso: variável de ambiente SENHA_ACESSO (Easypanel) ou arquivo config.php.']);
 }
 
+// O retorno do login do Google (google-retorno.php) chega sem o cabeçalho X-Senha; ele é validado pelo "state" de uso único.
+$retornoGoogle = ($_GET['acao'] ?? '') === 'agendaoauthretorno';
 $senha = $_SERVER['HTTP_X_SENHA'] ?? '';
-if (!is_string($senha) || !hash_equals(SENHA_ACESSO, $senha)) {
+if (!$retornoGoogle && (!is_string($senha) || !hash_equals(SENHA_ACESSO, $senha))) {
     usleep(400000); // dificulta tentativas em série
     sai(401, ['erro' => 'Senha inválida.']);
 }
@@ -56,7 +58,8 @@ function grava($f, $m) {
 }
 
 $acao = $_GET['acao'] ?? '';
-$in = json_decode(file_get_contents('php://input'), true);
+// Envio de áudio chega como binário (application/octet-stream) e é lido em fluxo pela própria ação.
+$in = stripos($_SERVER['CONTENT_TYPE'] ?? '', 'octet-stream') === false ? json_decode(file_get_contents('php://input'), true) : null;
 if (!is_array($in)) $in = [];
 
 // ---------- listar ----------
@@ -282,12 +285,40 @@ function gToken($sa) {
     $old = umask(0077); file_put_contents($cache, json_encode(['token' => $j['access_token'], 'exp' => $agora + (int)($j['expires_in'] ?? 3600)])); umask($old);
     return $j['access_token'];
 }
+// Login OAuth (conta Google da agenda): permite criar link do Meet e enviar convites aos participantes.
+const G_ESCOPO = 'https://www.googleapis.com/auth/calendar';
+function gClienteDe($json) {
+    $j = json_decode((string)$json, true);
+    $c = is_array($j) ? ($j['web'] ?? ($j['installed'] ?? $j)) : null;
+    if (!is_array($c) || empty($c['client_id']) || empty($c['client_secret'])) return null;
+    return ['client_id' => (string)$c['client_id'], 'client_secret' => (string)$c['client_secret']];
+}
+function gTokenOauth($cli, $refresh) {
+    $cache = sys_get_temp_dir() . '/memo-gtoken-' . substr(hash('sha256', $cli['client_id'] . $refresh . SENHA_ACESSO), 0, 12) . '.json';
+    $c = is_file($cache) ? json_decode(file_get_contents($cache), true) : null;
+    if ($c && ($c['exp'] ?? 0) > time() + 60) return $c['token'];
+    [$code, $j] = gHttp('POST', 'https://oauth2.googleapis.com/token', null, null,
+        ['grant_type' => 'refresh_token', 'refresh_token' => $refresh, 'client_id' => $cli['client_id'], 'client_secret' => $cli['client_secret']]);
+    if ($code !== 200 || empty($j['access_token'])) {
+        if (($j['error'] ?? '') === 'invalid_grant') sai(409, ['erro' => 'A conexão com o Google expirou ou foi cancelada. Entre com o Google de novo em Configurações.']);
+        sai(502, ['erro' => gErro($j, 'O Google recusou o login')]);
+    }
+    $old = umask(0077); file_put_contents($cache, json_encode(['token' => $j['access_token'], 'exp' => time() + (int)($j['expires_in'] ?? 3600)])); umask($old);
+    return $j['access_token'];
+}
+function gGravaCfg($cfg) { $old = umask(0077); $ok = file_put_contents(gAgendaArq(), json_encode($cfg, JSON_UNESCAPED_UNICODE)) !== false; umask($old); return $ok; }
 function gContexto() {
     $cfg = gAgendaCfg();
     if (!$cfg) sai(409, ['erro' => 'A agenda ainda não foi conectada ao Google. Configure em Configurações.']);
+    if (($cfg['modo'] ?? 'conta') === 'oauth') {
+        $cli = gClienteDe(decifra($cfg['cliente'] ?? ''));
+        $ref = decifra($cfg['refresh'] ?? '');
+        if (!$cli || !$ref) sai(409, ['erro' => 'Não foi possível ler a conexão com o Google (a senha de acesso mudou?). Entre com o Google de novo em Configurações.']);
+        return [gTokenOauth($cli, $ref), $cfg['agenda'], 'oauth'];
+    }
     $sa = json_decode((string)decifra($cfg['chave'] ?? ''), true);
     if (!is_array($sa) || empty($sa['private_key'])) sai(409, ['erro' => 'Não foi possível ler a chave da agenda (a senha de acesso mudou?). Envie a chave de novo em Configurações.']);
-    return [gToken($sa), $cfg['agenda']];
+    return [gToken($sa), $cfg['agenda'], 'conta'];
 }
 function gUrlEventos($agenda, $id = '') { return 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($agenda) . '/events' . ($id !== '' ? '/' . rawurlencode($id) : ''); }
 const G_CORES = ['reuniao' => '9', 'tarefa' => '5', 'evento' => '10'];
@@ -300,12 +331,20 @@ function gParaItem($e) {
         'inicio' => $diaInteiro ? $e['start']['date'] : ($e['start']['dateTime'] ?? ''), 'fim' => $diaInteiro ? ($e['end']['date'] ?? '') : ($e['end']['dateTime'] ?? ''),
         'diaInteiro' => $diaInteiro, 'tipo' => $tipo, 'concluida' => ($p['concluida'] ?? '') === '1',
         'responsavelId' => $p['responsavelId'] ?? '', 'responsavel' => $p['responsavel'] ?? '', 'criadoPor' => $p['criadoPor'] ?? '',
-        'link' => $e['htmlLink'] ?? '', 'doSistema' => ($p['facilitar'] ?? '') === '1', 'atualizado' => $e['updated'] ?? ''];
+        'link' => $e['htmlLink'] ?? '', 'doSistema' => ($p['facilitar'] ?? '') === '1', 'atualizado' => $e['updated'] ?? '',
+        'meet' => gLinkMeet($e), 'reuniaoId' => $p['reuniaoId'] ?? '',
+        'participantes' => array_values(array_map(function ($a) { return ['email' => $a['email'] ?? '', 'nome' => $a['displayName'] ?? '', 'resposta' => $a['responseStatus'] ?? 'needsAction']; },
+            array_filter($e['attendees'] ?? [], function ($a) { return empty($a['organizer']) && empty($a['resource']); })))];
+}
+function gLinkMeet($e) {
+    if (!empty($e['hangoutLink'])) return $e['hangoutLink'];
+    foreach ($e['conferenceData']['entryPoints'] ?? [] as $p) if (($p['entryPointType'] ?? '') === 'video') return $p['uri'] ?? '';
+    return '';
 }
 if ($acao === 'agendacfg') {
     $cfg = gAgendaCfg();
     if (!$cfg) sai(200, ['configurado' => false]);
-    sai(200, ['configurado' => true, 'agenda' => $cfg['agenda'], 'contaServico' => $cfg['contaServico'] ?? '', 'nomeAgenda' => $cfg['nomeAgenda'] ?? '', 'atualizadoPor' => $cfg['atualizadoPor'] ?? '', 'atualizadoEm' => $cfg['atualizadoEm'] ?? '']);
+    sai(200, ['configurado' => true, 'modo' => $cfg['modo'] ?? 'conta', 'agenda' => $cfg['agenda'], 'conta' => $cfg['conta'] ?? '', 'contaServico' => $cfg['contaServico'] ?? '', 'nomeAgenda' => $cfg['nomeAgenda'] ?? '', 'atualizadoPor' => $cfg['atualizadoPor'] ?? '', 'atualizadoEm' => $cfg['atualizadoEm'] ?? '']);
 }
 if ($acao === 'agendacfgsalvar') {
     $sa = json_decode((string)($in['chave'] ?? ''), true);
@@ -318,11 +357,63 @@ if ($acao === 'agendacfgsalvar') {
     $token = gToken($sa);
     [$code, $j] = gHttp('GET', 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($agenda), $token);
     if ($code !== 200) sai(400, ['erro' => gErro($j, 'Não foi possível acessar a agenda')]);
-    $cfg = ['chave' => cifra(json_encode($sa)), 'agenda' => $agenda, 'contaServico' => $sa['client_email'], 'nomeAgenda' => $j['summary'] ?? '',
+    $cfg = ['modo' => 'conta', 'chave' => cifra(json_encode($sa)), 'agenda' => $agenda, 'contaServico' => $sa['client_email'], 'nomeAgenda' => $j['summary'] ?? '',
             'atualizadoPor' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80), 'atualizadoEm' => date('c')];
-    $old = umask(0077); $ok = file_put_contents(gAgendaArq(), json_encode($cfg, JSON_UNESCAPED_UNICODE)) !== false; umask($old);
-    if (!$ok) sai(500, ['erro' => 'Não foi possível gravar a configuração.']);
-    sai(200, ['configurado' => true, 'agenda' => $agenda, 'contaServico' => $sa['client_email'], 'nomeAgenda' => $cfg['nomeAgenda']]);
+    if (!gGravaCfg($cfg)) sai(500, ['erro' => 'Não foi possível gravar a configuração.']);
+    sai(200, ['configurado' => true, 'modo' => 'conta', 'agenda' => $agenda, 'contaServico' => $sa['client_email'], 'nomeAgenda' => $cfg['nomeAgenda']]);
+}
+function gPendArq() { return rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/') . '/google-oauth-pendente.json'; }
+if ($acao === 'agendaoauthiniciar') {
+    // cliente: conteúdo do JSON "ID do cliente OAuth" (aplicativo da Web); se vier vazio, reaproveita o já gravado
+    $cli = gClienteDe($in['cliente'] ?? '');
+    $atual = gAgendaCfg();
+    if (!$cli && $atual && ($atual['modo'] ?? '') === 'oauth') $cli = gClienteDe(decifra($atual['cliente'] ?? ''));
+    if (!$cli) sai(400, ['erro' => 'Envie o arquivo JSON do cliente OAuth (Google Cloud → Credenciais → ID do cliente OAuth → Fazer download do JSON).']);
+    $retorno = trim((string)($in['retorno'] ?? ''));
+    if (!preg_match('~^(https://[^\s?#]+|http://(localhost|127\.0\.0\.1)(:\d+)?[^\s?#]*)/google-retorno\.php$~', $retorno)) sai(400, ['erro' => 'Endereço de retorno inválido.']);
+    $state = bin2hex(random_bytes(24));
+    $old = umask(0077);
+    file_put_contents(gPendArq(), json_encode(['state' => $state, 'cliente' => cifra(json_encode($cli)), 'retorno' => $retorno, 'usuario' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80), 'exp' => time() + 900]));
+    umask($old);
+    $url = 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query(['client_id' => $cli['client_id'], 'redirect_uri' => $retorno, 'response_type' => 'code',
+        'scope' => G_ESCOPO, 'access_type' => 'offline', 'prompt' => 'consent', 'include_granted_scopes' => 'true', 'state' => $state]);
+    sai(200, ['url' => $url]);
+}
+if ($acao === 'agendaoauthretorno') {
+    header('Content-Type: text/html; charset=utf-8');
+    $pagina = function ($ok, $msg) {
+        http_response_code($ok ? 200 : 400);
+        $m = htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+        echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Google Agenda</title>'
+           . '<style>body{font-family:system-ui,sans-serif;background:#eef2f6;color:#1b2a3a;display:grid;place-items:center;min-height:100vh;margin:0}'
+           . 'div{background:#fff;padding:28px 32px;border-radius:12px;max-width:440px;box-shadow:0 6px 24px rgba(0,0,0,.08);border-top:4px solid ' . ($ok ? '#2e7d4f' : '#a63a32') . '}h1{font-size:20px;margin:0 0 8px}</style></head>'
+           . '<body><div><h1>' . ($ok ? 'Google Agenda conectado' : 'Não foi possível conectar') . '</h1><p>' . $m . '</p><p>Pode fechar esta janela e voltar ao sistema.</p></div>'
+           . '<script>try{window.opener&&window.opener.postMessage({tipo:"agenda-oauth",ok:' . ($ok ? 'true' : 'false') . '},location.origin);if(' . ($ok ? 'true' : 'false') . ')setTimeout(function(){window.close()},1500)}catch(e){}</script></body></html>';
+        exit;
+    };
+    $pend = is_file(gPendArq()) ? json_decode(file_get_contents(gPendArq()), true) : null;
+    $state = (string)($_GET['state'] ?? '');
+    if (!is_array($pend) || $state === '' || !hash_equals((string)$pend['state'], $state)) $pagina(false, 'O pedido de conexão não confere ou já foi usado. Clique de novo em "Entrar com Google" no sistema.');
+    @unlink(gPendArq()); // uso único
+    if (($pend['exp'] ?? 0) < time()) $pagina(false, 'O pedido de conexão expirou. Clique de novo em "Entrar com Google".');
+    if (!empty($_GET['error'])) $pagina(false, $_GET['error'] === 'access_denied' ? 'O acesso não foi autorizado na tela do Google.' : 'O Google devolveu: ' . (string)$_GET['error']);
+    $cli = gClienteDe(decifra($pend['cliente'] ?? ''));
+    $code = (string)($_GET['code'] ?? '');
+    if (!$cli || $code === '') $pagina(false, 'Resposta do Google incompleta.');
+    [$c, $j] = gHttp('POST', 'https://oauth2.googleapis.com/token', null, null,
+        ['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $cli['client_id'], 'client_secret' => $cli['client_secret'], 'redirect_uri' => $pend['retorno']]);
+    if ($c !== 200 || empty($j['access_token'])) $pagina(false, gErro($j, 'O Google não liberou o acesso'));
+    if (strpos((string)($j['scope'] ?? G_ESCOPO), 'auth/calendar') === false) $pagina(false, 'É preciso marcar a permissão de acesso ao Google Agenda na tela do Google.');
+    $refresh = $j['refresh_token'] ?? '';
+    $atual = gAgendaCfg();
+    if ($refresh === '' && $atual && ($atual['modo'] ?? '') === 'oauth') $refresh = (string)decifra($atual['refresh'] ?? '');
+    if ($refresh === '') $pagina(false, 'O Google não enviou a autorização permanente. Remova o acesso do app em myaccount.google.com/permissions e conecte de novo.');
+    [$c2, $cal] = gHttp('GET', 'https://www.googleapis.com/calendar/v3/calendars/primary', $j['access_token']);
+    if ($c2 !== 200) $pagina(false, gErro($cal, 'Não foi possível abrir a agenda da conta'));
+    $cfg = ['modo' => 'oauth', 'cliente' => cifra(json_encode($cli)), 'refresh' => cifra($refresh), 'agenda' => $cal['id'] ?? 'primary', 'conta' => $cal['id'] ?? '',
+            'nomeAgenda' => $cal['summary'] ?? '', 'atualizadoPor' => $pend['usuario'] ?? '', 'atualizadoEm' => date('c')];
+    if (!gGravaCfg($cfg)) $pagina(false, 'Não foi possível gravar a configuração no servidor.');
+    $pagina(true, 'A agenda de ' . ($cal['id'] ?? 'sua conta') . ' está ligada ao sistema. Reuniões novas podem ter link do Meet e convites.');
 }
 if ($acao === 'agendacfgremover') { @unlink(gAgendaArq()); sai(200, ['configurado' => false]); }
 if ($acao === 'agendaeventos') {
@@ -337,7 +428,7 @@ if ($acao === 'agendaeventos') {
     sai(200, ['eventos' => array_map('gParaItem', array_values(array_filter($j['items'] ?? [], function ($e) { return ($e['status'] ?? '') !== 'cancelled'; })))]);
 }
 if ($acao === 'agendasalvar') {
-    [$token, $agenda] = gContexto();
+    [$token, $agenda, $modo] = gContexto();
     $e = $in['evento'] ?? null;
     if (!is_array($e)) sai(400, ['erro' => 'Dados do compromisso ausentes.']);
     $titulo = mb_substr(trim((string)($e['titulo'] ?? '')), 0, 200);
@@ -361,18 +452,207 @@ if ($acao === 'agendasalvar') {
         'start' => $start, 'end' => $end, 'colorId' => $concluida ? '8' : G_CORES[$tipo],
         'extendedProperties' => ['private' => ['facilitar' => '1', 'tipo' => $tipo, 'responsavelId' => mb_substr((string)($e['responsavelId'] ?? ''), 0, 40),
             'responsavel' => $resp, 'concluida' => $concluida ? '1' : '0', 'criadoPor' => mb_substr((string)($e['criadoPor'] ?? ''), 0, 80) ?: $usuario, 'atualizadoPor' => $usuario]]];
+    if (!empty($e['reuniaoId']) && preg_match('/^r\d{14}[a-f0-9]{6}$/', (string)$e['reuniaoId'])) $corpo['extendedProperties']['private']['reuniaoId'] = $e['reuniaoId'];
     $id = (string)($e['id'] ?? '');
     if ($id !== '' && !preg_match('/^[A-Za-z0-9_\-@.]{1,1024}$/', $id)) sai(400, ['erro' => 'Compromisso inválido.']);
-    [$code, $j] = $id !== '' ? gHttp('PATCH', gUrlEventos($agenda, $id), $token, $corpo) : gHttp('POST', gUrlEventos($agenda), $token, $corpo);
+    $qs = '';
+    if ($modo === 'oauth') {
+        // participantes recebem o convite por e-mail do próprio Google; o link do Meet é criado pelo Google Agenda
+        if (isset($e['participantes']) && is_array($e['participantes'])) {
+            $emails = [];
+            foreach ($e['participantes'] as $p) {
+                $m = strtolower(trim((string)(is_array($p) ? ($p['email'] ?? '') : $p)));
+                if ($m === '') continue;
+                if (!filter_var($m, FILTER_VALIDATE_EMAIL)) sai(400, ['erro' => 'E-mail de participante inválido: ' . $m]);
+                $emails[$m] = ['email' => $m];
+            }
+            if (count($emails) > 100) sai(400, ['erro' => 'No máximo 100 participantes.']);
+            $corpo['attendees'] = array_values($emails);
+        }
+        $avisar = !empty($e['enviarConvites']) && !empty($corpo['attendees']);
+        $qs = '?sendUpdates=' . ($avisar ? 'all' : 'none');
+        if (!empty($e['meet'])) {
+            $tem = false;
+            if ($id !== '') { [$cx, $ex] = gHttp('GET', gUrlEventos($agenda, $id), $token); $tem = $cx === 200 && gLinkMeet($ex) !== ''; }
+            if (!$tem) $corpo['conferenceData'] = ['createRequest' => ['requestId' => bin2hex(random_bytes(12)), 'conferenceSolutionKey' => ['type' => 'hangoutsMeet']]];
+            $qs .= '&conferenceDataVersion=1';
+        }
+    }
+    [$code, $j] = $id !== '' ? gHttp('PATCH', gUrlEventos($agenda, $id) . $qs, $token, $corpo) : gHttp('POST', gUrlEventos($agenda) . $qs, $token, $corpo);
     if ($code !== 200) sai(502, ['erro' => gErro($j, 'O Google não aceitou o compromisso')]);
     sai(200, ['evento' => gParaItem($j)]);
 }
 if ($acao === 'agendaexcluir') {
-    [$token, $agenda] = gContexto();
+    [$token, $agenda, $modo] = gContexto();
     $id = (string)($in['id'] ?? '');
     if (!preg_match('/^[A-Za-z0-9_\-@.]{1,1024}$/', $id)) sai(400, ['erro' => 'Compromisso inválido.']);
-    [$code, $j] = gHttp('DELETE', gUrlEventos($agenda, $id), $token);
+    [$code, $j] = gHttp('DELETE', gUrlEventos($agenda, $id) . ($modo === 'oauth' && !empty($in['avisar']) ? '?sendUpdates=all' : ''), $token);
     if ($code !== 204 && $code !== 200 && $code !== 410) sai(502, ['erro' => gErro($j, 'Não foi possível excluir no Google')]);
+    sai(200, ['ok' => true]);
+}
+
+// ---------- reuniões: gravação, transcrição e ata ----------
+// Cada reunião fica em DADOS_DIR/reunioes/<id>/: meta.json, parte-0001.webm (+ parte-0001.json com a transcrição) e ata.json.
+// A transcrição roda em segundo plano (transcricao/transcrever.py): Groq (rápido, se houver chave) ou Whisper no próprio servidor.
+function reunDir() { $d = rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/') . '/reunioes'; if (!is_dir($d)) @mkdir($d, 0750, true); return $d; }
+function reunId($id) { return is_string($id) && preg_match('/^r\d{14}[a-f0-9]{6}$/', $id); }
+function reunMeta($id) { $f = reunDir() . "/$id/meta.json"; $m = is_file($f) ? json_decode(file_get_contents($f), true) : null; return is_array($m) ? $m : null; }
+function reunGravaMeta($id, $m) { $f = reunDir() . "/$id/meta.json"; file_put_contents("$f.tmp", json_encode($m, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)); rename("$f.tmp", $f); }
+function reunPartes($id) {
+    $out = [];
+    foreach (glob(reunDir() . "/$id/parte-*") as $f) {
+        if (!preg_match('/parte-(\d{4})\.(webm|ogg|mp3|m4a|wav|mp4|aac|opus|mpeg)$/', $f, $mm)) continue;
+        $raiz = substr($f, 0, -strlen($mm[2]) - 1);
+        $out[(int)$mm[1]] = ['n' => (int)$mm[1], 'arquivo' => $f, 'feita' => is_file("$raiz.json"), 'erro' => is_file("$raiz.erro") ? trim((string)file_get_contents("$raiz.erro")) : ''];
+    }
+    ksort($out);
+    return $out;
+}
+function transcCfgArq() { return rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/') . '/transcricao.json'; }
+function transcCfg() { $f = transcCfgArq(); $c = is_file($f) ? json_decode(file_get_contents($f), true) : null; return is_array($c) ? $c : []; }
+function transcChaveGroq() { $c = transcCfg(); $k = !empty($c['groq']) ? decifra($c['groq']) : ''; return $k ?: (getenv('GROQ_API_KEY') ?: ''); }
+function transcritorDisponivel() { $py = getenv('TRANSCRITOR') ?: '/opt/transcricao/transcrever.py'; return is_file($py) && function_exists('exec') ? $py : ''; }
+/** Inicia o transcritor em segundo plano (se já houver um rodando, o próprio script sai na hora). */
+function iniciarTranscritor() {
+    $py = transcritorDisponivel();
+    if (!$py) return false;
+    $lock = @fopen(reunDir() . '/.transcritor.lock', 'c');
+    if ($lock && !flock($lock, LOCK_EX | LOCK_NB)) { fclose($lock); return true; } // já está rodando
+    if ($lock) { flock($lock, LOCK_UN); fclose($lock); }
+    $groq = (transcCfg()['motor'] ?? 'groq') === 'local' ? '' : transcChaveGroq();
+    putenv('GROQ_API_KEY=' . $groq);
+    exec('nice -n 10 python3 ' . escapeshellarg($py) . ' ' . escapeshellarg(reunDir()) . ' > /dev/null 2>&1 &');
+    putenv('GROQ_API_KEY=');
+    return true;
+}
+function reunResumo($id, $m) {
+    $partes = reunPartes($id);
+    $feitas = count(array_filter($partes, function ($p) { return $p['feita']; }));
+    $erros = count(array_filter($partes, function ($p) { return $p['erro'] !== ''; }));
+    $status = $m['status'] ?? 'gravando';
+    if ($status === 'finalizada') $status = ($feitas + $erros) >= count($partes) ? 'pronta' : 'transcrevendo';
+    return ['id' => $id, 'titulo' => $m['titulo'] ?? '', 'eventoId' => $m['eventoId'] ?? '', 'inicio' => $m['inicio'] ?? '', 'local' => $m['local'] ?? '',
+        'participantes' => $m['participantes'] ?? [], 'criadoPor' => $m['criadoPor'] ?? '', 'criadoEm' => $m['criadoEm'] ?? '', 'duracao' => (int)($m['duracao'] ?? 0),
+        'status' => $status, 'partes' => count($partes), 'transcritas' => $feitas, 'falhas' => $erros, 'temAta' => is_file(reunDir() . "/$id/ata.json"),
+        'motor' => $m['motor'] ?? ''];
+}
+if ($acao === 'transcfg') {
+    $c = transcCfg();
+    sai(200, ['motor' => $c['motor'] ?? 'groq', 'groqConfigurado' => transcChaveGroq() !== '', 'groqAmbiente' => empty($c['groq']) && getenv('GROQ_API_KEY'),
+        'localDisponivel' => transcritorDisponivel() !== '', 'atualizadoPor' => $c['atualizadoPor'] ?? '', 'atualizadoEm' => $c['atualizadoEm'] ?? '']);
+}
+if ($acao === 'transcfgsalvar') {
+    $c = transcCfg();
+    $motor = ($in['motor'] ?? '') === 'local' ? 'local' : 'groq';
+    if (array_key_exists('chave', $in) && $in['chave'] !== null) {
+        $k = trim((string)$in['chave']);
+        if ($k === '') unset($c['groq']);
+        else {
+            if (!preg_match('/^gsk_[A-Za-z0-9]{20,}$/', $k)) sai(400, ['erro' => 'A chave do Groq começa com "gsk_". Copie de console.groq.com → API Keys.']);
+            [$code, $j] = gHttp('GET', 'https://api.groq.com/openai/v1/models', $k);
+            if ($code === 401) sai(400, ['erro' => 'O Groq recusou essa chave. Gere uma nova em console.groq.com → API Keys.']);
+            if ($code !== 200) sai(502, ['erro' => 'Não foi possível testar a chave no Groq agora (código ' . $code . ').']);
+            $c['groq'] = cifra($k);
+        }
+    }
+    $c['motor'] = $motor; $c['atualizadoPor'] = mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80); $c['atualizadoEm'] = date('c');
+    $old = umask(0077); file_put_contents(transcCfgArq(), json_encode($c, JSON_UNESCAPED_UNICODE)); umask($old);
+    sai(200, ['ok' => true]);
+}
+if ($acao === 'reunioes') {
+    $out = [];
+    foreach (glob(reunDir() . '/r*/meta.json') as $f) { $id = basename(dirname($f)); $m = reunMeta($id); if ($m) $out[] = reunResumo($id, $m); }
+    usort($out, function ($a, $b) { return strcmp($b['inicio'] ?: $b['criadoEm'], $a['inicio'] ?: $a['criadoEm']); });
+    sai(200, ['reunioes' => $out]);
+}
+if ($acao === 'reuniaocriar') {
+    $titulo = mb_substr(trim((string)($in['titulo'] ?? '')), 0, 200);
+    if ($titulo === '') sai(400, ['erro' => 'Informe o título da reunião.']);
+    $id = 'r' . date('YmdHis') . bin2hex(random_bytes(3));
+    if (!mkdir(reunDir() . "/$id", 0750, true)) sai(500, ['erro' => 'Não foi possível criar a pasta da reunião.']);
+    $parts = [];
+    foreach ((array)($in['participantes'] ?? []) as $p) { $t = mb_substr(trim((string)$p), 0, 120); if ($t !== '') $parts[] = $t; }
+    $m = ['titulo' => $titulo, 'eventoId' => mb_substr((string)($in['eventoId'] ?? ''), 0, 1024), 'inicio' => (string)($in['inicio'] ?? date('c')), 'local' => mb_substr((string)($in['local'] ?? ''), 0, 300),
+          'participantes' => array_slice($parts, 0, 100), 'status' => 'gravando', 'criadoPor' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80), 'criadoEm' => date('c'), 'duracao' => 0,
+          'motor' => (transcCfg()['motor'] ?? 'groq') !== 'local' && transcChaveGroq() !== '' ? 'groq' : 'local'];
+    reunGravaMeta($id, $m);
+    sai(200, ['reuniao' => reunResumo($id, $m)]);
+}
+if ($acao === 'reuniaoparte') {
+    // corpo binário (áudio). Parte da gravação ao vivo (n = 1, 2, 3…, ini = segundos desde o início)
+    // ou pedaço de um arquivo enviado (n = 1, desloc = posição do pedaço, fim = 1 no último).
+    $id = (string)($_GET['id'] ?? ''); $n = (int)($_GET['n'] ?? 0); $ext = strtolower((string)($_GET['ext'] ?? 'webm'));
+    if (!reunId($id) || !reunMeta($id)) sai(404, ['erro' => 'Reunião não encontrada.']);
+    if ($n < 1 || $n > 9999 || !in_array($ext, ['webm', 'ogg', 'mp3', 'm4a', 'wav', 'mp4', 'aac', 'opus', 'mpeg'], true)) sai(400, ['erro' => 'Parte inválida.']);
+    $destino = sprintf('%s/%s/parte-%04d.%s', reunDir(), $id, $n, $ext);
+    $tmp = "$destino.tmp";
+    $desloc = (int)($_GET['desloc'] ?? 0);
+    $ultimo = !isset($_GET['desloc']) || !empty($_GET['fim']);
+    if ($desloc === 0 && is_file($tmp)) @unlink($tmp);
+    if ($desloc > 0 && (!is_file($tmp) || filesize($tmp) !== $desloc)) sai(409, ['erro' => 'Envio fora de ordem. Tente de novo.', 'recebido' => is_file($tmp) ? filesize($tmp) : 0]);
+    $ent = fopen('php://input', 'rb'); $sai = fopen($tmp, 'ab');
+    $bytes = stream_copy_to_stream($ent, $sai); fclose($ent); fclose($sai);
+    if (!$bytes) sai(400, ['erro' => 'Parte vazia.']);
+    if (filesize($tmp) > 600 * 1024 * 1024) { @unlink($tmp); sai(413, ['erro' => 'Arquivo grande demais (máximo 600 MB).']); }
+    if ($ultimo) {
+        rename($tmp, $destino);
+        $m = reunMeta($id);
+        $m['inicios'][(string)$n] = (float)($_GET['ini'] ?? 0);
+        if (isset($_GET['arquivo'])) { $m['arquivoOriginal'] = mb_substr((string)$_GET['arquivo'], 0, 200); }
+        reunGravaMeta($id, $m);
+        iniciarTranscritor();
+    }
+    sai(200, ['ok' => true, 'recebido' => filesize($ultimo ? $destino : $tmp)]);
+}
+if ($acao === 'reuniaofinalizar') {
+    $id = (string)($in['id'] ?? '');
+    $m = reunId($id) ? reunMeta($id) : null;
+    if (!$m) sai(404, ['erro' => 'Reunião não encontrada.']);
+    $m['status'] = 'finalizada'; $m['duracao'] = max((int)($m['duracao'] ?? 0), (int)($in['duracao'] ?? 0)); $m['finalizadaEm'] = date('c');
+    reunGravaMeta($id, $m);
+    iniciarTranscritor();
+    sai(200, ['reuniao' => reunResumo($id, $m)]);
+}
+if ($acao === 'reuniao') {
+    $id = (string)($_GET['id'] ?? '');
+    $m = reunId($id) ? reunMeta($id) : null;
+    if (!$m) sai(404, ['erro' => 'Reunião não encontrada.']);
+    $segs = []; $pendente = false;
+    foreach (reunPartes($id) as $p) {
+        if (!$p['feita']) { if ($p['erro'] === '') $pendente = true; continue; }
+        $t = json_decode((string)file_get_contents(preg_replace('/\.[a-z0-9]+$/', '.json', $p['arquivo'])), true);
+        $base0 = (float)($m['inicios'][(string)$p['n']] ?? 0);
+        foreach ($t['segmentos'] ?? [] as $sg) $segs[] = ['ini' => round($base0 + (float)$sg['ini'], 1), 'fim' => round($base0 + (float)$sg['fim'], 1), 'texto' => (string)$sg['texto']];
+    }
+    if ($pendente) iniciarTranscritor(); // retoma depois de reinício do servidor
+    $af = reunDir() . "/$id/ata.json";
+    $erros = array_values(array_filter(array_map(function ($p) { return $p['erro']; }, reunPartes($id))));
+    sai(200, ['reuniao' => reunResumo($id, $m), 'segmentos' => $segs, 'ata' => is_file($af) ? json_decode(file_get_contents($af), true) : null, 'erros' => array_slice($erros, 0, 3)]);
+}
+if ($acao === 'reuniaoretentar') {
+    $id = (string)($in['id'] ?? '');
+    if (!reunId($id) || !reunMeta($id)) sai(404, ['erro' => 'Reunião não encontrada.']);
+    foreach (glob(reunDir() . "/$id/parte-*.erro") as $f) @unlink($f);
+    iniciarTranscritor();
+    sai(200, ['ok' => true]);
+}
+if ($acao === 'reuniaoata') {
+    $id = (string)($in['id'] ?? '');
+    $m = reunId($id) ? reunMeta($id) : null;
+    if (!$m || !is_array($in['ata'] ?? null)) sai(404, ['erro' => 'Reunião não encontrada.']);
+    $ata = $in['ata']; $ata['atualizadoPor'] = mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80); $ata['atualizadoEm'] = date('c');
+    $txt = json_encode($ata, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    if (strlen($txt) > 2 * 1024 * 1024) sai(413, ['erro' => 'Ata grande demais.']);
+    file_put_contents(reunDir() . "/$id/ata.json", $txt);
+    if (!empty($ata['titulo'])) { $m['titulo'] = mb_substr(trim((string)$ata['titulo']), 0, 200); reunGravaMeta($id, $m); }
+    sai(200, ['ata' => $ata]);
+}
+if ($acao === 'reuniaoexcluir') {
+    $id = (string)($in['id'] ?? '');
+    if (!reunId($id) || !reunMeta($id)) sai(404, ['erro' => 'Reunião não encontrada.']);
+    $lix = rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/') . '/lixeira';
+    if (!is_dir($lix)) @mkdir($lix, 0750, true);
+    if (!rename(reunDir() . "/$id", "$lix/reuniao-$id")) sai(500, ['erro' => 'Não foi possível excluir.']);
     sai(200, ['ok' => true]);
 }
 
