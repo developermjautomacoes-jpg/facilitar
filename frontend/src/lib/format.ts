@@ -63,3 +63,15 @@ export function nomeProprio(v: unknown): string {
   return String(v ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean)
     .map((p, i) => (i > 0 && minusculas.has(p) ? p : p[0].toUpperCase() + p.slice(1))).join(" ");
 }
+
+export const moeda = (v: number): string => (Number.isFinite(v) ? v : 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+export const numeroBr = (v: number, casas = 2): string => (Number.isFinite(v) ? v : 0).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+
+/** "1.234,56" ou "1234.56" → 1234.56 */
+export function lerNumero(v: string): number {
+  let s = String(v ?? "").trim().replace(/[^\d,.-]/g, "");
+  if (!s) return 0;
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}

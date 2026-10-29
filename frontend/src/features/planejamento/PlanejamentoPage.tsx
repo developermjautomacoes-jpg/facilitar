@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { PlanejamentoResumo } from "@/types";
-import { Button, ConfirmDialog, Input, Loading, Notice, PageHeader, useToast } from "@/components/ui";
+import { Button, ConfirmDialog, Icon, Input, Loading, Notice, PageHeader, useToast } from "@/components/ui";
 import { dataHora } from "@/lib/format";
 import { CHAVES, gravarLocal, lerJson, removerLocal } from "@/lib/storage";
 import { excluirPlanejamento, lerPlanejamento, listarPlanejamentos, obterSimulador, salvarPlanejamento } from "@/services/planejamentoService";
@@ -12,6 +13,7 @@ import styles from "./PlanejamentoPage.module.css";
  * e guarda o estado no localStorage; esta tela salva, abre e exclui esse estado no servidor.
  */
 export function PlanejamentoPage() {
+  const navegar = useNavigate();
   const avisar = useToast();
   const quadro = useRef<HTMLIFrameElement>(null);
   const [html, setHtml] = useState("");
@@ -97,7 +99,8 @@ export function PlanejamentoPage() {
 
   return (
     <div className={styles.pagina}>
-      <PageHeader titulo="Planejamento tributário" descricao="Simples Nacional × Lucro Presumido × Lucro Real, com a transição da reforma tributária (CBS e IBS). Salve cada planejamento no servidor para abrir e editar depois." />
+      <PageHeader titulo="Planejamento tributário" descricao="Simples Nacional × Lucro Presumido × Lucro Real, com a transição da reforma tributária (CBS e IBS). Salve cada planejamento no servidor para abrir e editar depois."
+        acoes={<Button icone={<Icon nome="preco" />} onClick={() => navegar("/precificacao")}>Precificação</Button>} />
       <div className={styles.barra}>
         <Input rotulo="Cliente / nome do planejamento" placeholder="Ex.: Empresa X — abertura de 3ª empresa" value={cliente}
           onChange={(e) => { setCliente(e.target.value); if (atual) setSujo(true); }} className={styles.nome} maxLength={120} />

@@ -10,11 +10,15 @@ import { MemorandoEditorPage } from "@/features/memorandos/MemorandoEditorPage";
 import { MemorandosProvider } from "@/features/memorandos/MemorandosContext";
 import { PainelPage } from "@/features/painel/PainelPage";
 import { PlanejamentoPage } from "@/features/planejamento/PlanejamentoPage";
+import { PerfilPage } from "@/features/perfil/PerfilPage";
+import { PerfilProvider } from "@/features/perfil/PerfilContext";
+import { PrecificacaoPage } from "@/features/precificacao/PrecificacaoPage";
 
 function Rotas() {
   const { usuario } = useAuth();
   if (!usuario) return <LoginPage />;
   return (
+    <PerfilProvider>
     <MemorandosProvider>
       <Routes>
         <Route element={<AppLayout />}>
@@ -25,11 +29,14 @@ function Rotas() {
           <Route path="memorandos/:id/:acao" element={<MemorandoEditorPage />} />
           <Route path="colaboradores" element={<ColaboradoresPage />} />
           <Route path="planejamento" element={<PlanejamentoPage />} />
+          <Route path="precificacao" element={<PrecificacaoPage />} />
+          <Route path="perfil" element={<PerfilPage />} />
           <Route path="configuracoes" element={<CertificadosPage />} />
           <Route path="*" element={<Navigate to="/painel" replace />} />
         </Route>
       </Routes>
     </MemorandosProvider>
+    </PerfilProvider>
   );
 }
 
