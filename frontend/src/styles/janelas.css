@@ -209,3 +209,5 @@ body.embed-trib #modTrib > .sectionhead p { display: none; }
 body.embed-trib #modTrib > .sectionhead { justify-content: flex-end; }
 @media (max-width: 560px) { body.embed-trib .pt-per input { width: 100%; } body.embed-trib .pt-per { flex-wrap: wrap; } }
 body.embed-trib .pt-modo label { text-transform: none; letter-spacing: 0; font-size: inherit; color: inherit; }
+body.embed-trib .pt-per { gap: var(--space-2); }
+@media (max-width: 560px) { body.embed-trib .pt-per .sel { flex: 1 1 40%; width: auto !important; min-width: 0 !important; } }
