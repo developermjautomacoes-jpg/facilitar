@@ -27,8 +27,10 @@ if (SENHA_ACESSO === 'TROQUE-ESTA-SENHA') {
     sai(500, ['erro' => 'Defina a senha de acesso: variável de ambiente SENHA_ACESSO (Easypanel) ou arquivo config.php.']);
 }
 
+// O retorno do login do Google (google-retorno.php) chega sem o cabeçalho X-Senha; ele é validado pelo "state" de uso único.
+$retornoGoogle = ($_GET['acao'] ?? '') === 'agendaoauthretorno';
 $senha = $_SERVER['HTTP_X_SENHA'] ?? '';
-if (!is_string($senha) || !hash_equals(SENHA_ACESSO, $senha)) {
+if (!$retornoGoogle && (!is_string($senha) || !hash_equals(SENHA_ACESSO, $senha))) {
     usleep(400000); // dificulta tentativas em série
     sai(401, ['erro' => 'Senha inválida.']);
 }
@@ -282,12 +284,40 @@ function gToken($sa) {
     $old = umask(0077); file_put_contents($cache, json_encode(['token' => $j['access_token'], 'exp' => $agora + (int)($j['expires_in'] ?? 3600)])); umask($old);
     return $j['access_token'];
 }
+// Login OAuth (conta Google da agenda): permite criar link do Meet e enviar convites aos participantes.
+const G_ESCOPO = 'https://www.googleapis.com/auth/calendar';
+function gClienteDe($json) {
+    $j = json_decode((string)$json, true);
+    $c = is_array($j) ? ($j['web'] ?? ($j['installed'] ?? $j)) : null;
+    if (!is_array($c) || empty($c['client_id']) || empty($c['client_secret'])) return null;
+    return ['client_id' => (string)$c['client_id'], 'client_secret' => (string)$c['client_secret']];
+}
+function gTokenOauth($cli, $refresh) {
+    $cache = sys_get_temp_dir() . '/memo-gtoken-' . substr(hash('sha256', $cli['client_id'] . $refresh . SENHA_ACESSO), 0, 12) . '.json';
+    $c = is_file($cache) ? json_decode(file_get_contents($cache), true) : null;
+    if ($c && ($c['exp'] ?? 0) > time() + 60) return $c['token'];
+    [$code, $j] = gHttp('POST', 'https://oauth2.googleapis.com/token', null, null,
+        ['grant_type' => 'refresh_token', 'refresh_token' => $refresh, 'client_id' => $cli['client_id'], 'client_secret' => $cli['client_secret']]);
+    if ($code !== 200 || empty($j['access_token'])) {
+        if (($j['error'] ?? '') === 'invalid_grant') sai(409, ['erro' => 'A conexão com o Google expirou ou foi cancelada. Entre com o Google de novo em Configurações.']);
+        sai(502, ['erro' => gErro($j, 'O Google recusou o login')]);
+    }
+    $old = umask(0077); file_put_contents($cache, json_encode(['token' => $j['access_token'], 'exp' => time() + (int)($j['expires_in'] ?? 3600)])); umask($old);
+    return $j['access_token'];
+}
+function gGravaCfg($cfg) { $old = umask(0077); $ok = file_put_contents(gAgendaArq(), json_encode($cfg, JSON_UNESCAPED_UNICODE)) !== false; umask($old); return $ok; }
 function gContexto() {
     $cfg = gAgendaCfg();
     if (!$cfg) sai(409, ['erro' => 'A agenda ainda não foi conectada ao Google. Configure em Configurações.']);
+    if (($cfg['modo'] ?? 'conta') === 'oauth') {
+        $cli = gClienteDe(decifra($cfg['cliente'] ?? ''));
+        $ref = decifra($cfg['refresh'] ?? '');
+        if (!$cli || !$ref) sai(409, ['erro' => 'Não foi possível ler a conexão com o Google (a senha de acesso mudou?). Entre com o Google de novo em Configurações.']);
+        return [gTokenOauth($cli, $ref), $cfg['agenda'], 'oauth'];
+    }
     $sa = json_decode((string)decifra($cfg['chave'] ?? ''), true);
     if (!is_array($sa) || empty($sa['private_key'])) sai(409, ['erro' => 'Não foi possível ler a chave da agenda (a senha de acesso mudou?). Envie a chave de novo em Configurações.']);
-    return [gToken($sa), $cfg['agenda']];
+    return [gToken($sa), $cfg['agenda'], 'conta'];
 }
 function gUrlEventos($agenda, $id = '') { return 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($agenda) . '/events' . ($id !== '' ? '/' . rawurlencode($id) : ''); }
 const G_CORES = ['reuniao' => '9', 'tarefa' => '5', 'evento' => '10'];
@@ -300,12 +330,20 @@ function gParaItem($e) {
         'inicio' => $diaInteiro ? $e['start']['date'] : ($e['start']['dateTime'] ?? ''), 'fim' => $diaInteiro ? ($e['end']['date'] ?? '') : ($e['end']['dateTime'] ?? ''),
         'diaInteiro' => $diaInteiro, 'tipo' => $tipo, 'concluida' => ($p['concluida'] ?? '') === '1',
         'responsavelId' => $p['responsavelId'] ?? '', 'responsavel' => $p['responsavel'] ?? '', 'criadoPor' => $p['criadoPor'] ?? '',
-        'link' => $e['htmlLink'] ?? '', 'doSistema' => ($p['facilitar'] ?? '') === '1', 'atualizado' => $e['updated'] ?? ''];
+        'link' => $e['htmlLink'] ?? '', 'doSistema' => ($p['facilitar'] ?? '') === '1', 'atualizado' => $e['updated'] ?? '',
+        'meet' => gLinkMeet($e),
+        'participantes' => array_values(array_map(function ($a) { return ['email' => $a['email'] ?? '', 'nome' => $a['displayName'] ?? '', 'resposta' => $a['responseStatus'] ?? 'needsAction']; },
+            array_filter($e['attendees'] ?? [], function ($a) { return empty($a['organizer']) && empty($a['resource']); })))];
+}
+function gLinkMeet($e) {
+    if (!empty($e['hangoutLink'])) return $e['hangoutLink'];
+    foreach ($e['conferenceData']['entryPoints'] ?? [] as $p) if (($p['entryPointType'] ?? '') === 'video') return $p['uri'] ?? '';
+    return '';
 }
 if ($acao === 'agendacfg') {
     $cfg = gAgendaCfg();
     if (!$cfg) sai(200, ['configurado' => false]);
-    sai(200, ['configurado' => true, 'agenda' => $cfg['agenda'], 'contaServico' => $cfg['contaServico'] ?? '', 'nomeAgenda' => $cfg['nomeAgenda'] ?? '', 'atualizadoPor' => $cfg['atualizadoPor'] ?? '', 'atualizadoEm' => $cfg['atualizadoEm'] ?? '']);
+    sai(200, ['configurado' => true, 'modo' => $cfg['modo'] ?? 'conta', 'agenda' => $cfg['agenda'], 'conta' => $cfg['conta'] ?? '', 'contaServico' => $cfg['contaServico'] ?? '', 'nomeAgenda' => $cfg['nomeAgenda'] ?? '', 'atualizadoPor' => $cfg['atualizadoPor'] ?? '', 'atualizadoEm' => $cfg['atualizadoEm'] ?? '']);
 }
 if ($acao === 'agendacfgsalvar') {
     $sa = json_decode((string)($in['chave'] ?? ''), true);
@@ -318,11 +356,63 @@ if ($acao === 'agendacfgsalvar') {
     $token = gToken($sa);
     [$code, $j] = gHttp('GET', 'https://www.googleapis.com/calendar/v3/calendars/' . rawurlencode($agenda), $token);
     if ($code !== 200) sai(400, ['erro' => gErro($j, 'Não foi possível acessar a agenda')]);
-    $cfg = ['chave' => cifra(json_encode($sa)), 'agenda' => $agenda, 'contaServico' => $sa['client_email'], 'nomeAgenda' => $j['summary'] ?? '',
+    $cfg = ['modo' => 'conta', 'chave' => cifra(json_encode($sa)), 'agenda' => $agenda, 'contaServico' => $sa['client_email'], 'nomeAgenda' => $j['summary'] ?? '',
             'atualizadoPor' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80), 'atualizadoEm' => date('c')];
-    $old = umask(0077); $ok = file_put_contents(gAgendaArq(), json_encode($cfg, JSON_UNESCAPED_UNICODE)) !== false; umask($old);
-    if (!$ok) sai(500, ['erro' => 'Não foi possível gravar a configuração.']);
-    sai(200, ['configurado' => true, 'agenda' => $agenda, 'contaServico' => $sa['client_email'], 'nomeAgenda' => $cfg['nomeAgenda']]);
+    if (!gGravaCfg($cfg)) sai(500, ['erro' => 'Não foi possível gravar a configuração.']);
+    sai(200, ['configurado' => true, 'modo' => 'conta', 'agenda' => $agenda, 'contaServico' => $sa['client_email'], 'nomeAgenda' => $cfg['nomeAgenda']]);
+}
+function gPendArq() { return rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/') . '/google-oauth-pendente.json'; }
+if ($acao === 'agendaoauthiniciar') {
+    // cliente: conteúdo do JSON "ID do cliente OAuth" (aplicativo da Web); se vier vazio, reaproveita o já gravado
+    $cli = gClienteDe($in['cliente'] ?? '');
+    $atual = gAgendaCfg();
+    if (!$cli && $atual && ($atual['modo'] ?? '') === 'oauth') $cli = gClienteDe(decifra($atual['cliente'] ?? ''));
+    if (!$cli) sai(400, ['erro' => 'Envie o arquivo JSON do cliente OAuth (Google Cloud → Credenciais → ID do cliente OAuth → Fazer download do JSON).']);
+    $retorno = trim((string)($in['retorno'] ?? ''));
+    if (!preg_match('~^(https://[^\s?#]+|http://(localhost|127\.0\.0\.1)(:\d+)?[^\s?#]*)/google-retorno\.php$~', $retorno)) sai(400, ['erro' => 'Endereço de retorno inválido.']);
+    $state = bin2hex(random_bytes(24));
+    $old = umask(0077);
+    file_put_contents(gPendArq(), json_encode(['state' => $state, 'cliente' => cifra(json_encode($cli)), 'retorno' => $retorno, 'usuario' => mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80), 'exp' => time() + 900]));
+    umask($old);
+    $url = 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query(['client_id' => $cli['client_id'], 'redirect_uri' => $retorno, 'response_type' => 'code',
+        'scope' => G_ESCOPO, 'access_type' => 'offline', 'prompt' => 'consent', 'include_granted_scopes' => 'true', 'state' => $state]);
+    sai(200, ['url' => $url]);
+}
+if ($acao === 'agendaoauthretorno') {
+    header('Content-Type: text/html; charset=utf-8');
+    $pagina = function ($ok, $msg) {
+        http_response_code($ok ? 200 : 400);
+        $m = htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+        echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Google Agenda</title>'
+           . '<style>body{font-family:system-ui,sans-serif;background:#eef2f6;color:#1b2a3a;display:grid;place-items:center;min-height:100vh;margin:0}'
+           . 'div{background:#fff;padding:28px 32px;border-radius:12px;max-width:440px;box-shadow:0 6px 24px rgba(0,0,0,.08);border-top:4px solid ' . ($ok ? '#2e7d4f' : '#a63a32') . '}h1{font-size:20px;margin:0 0 8px}</style></head>'
+           . '<body><div><h1>' . ($ok ? 'Google Agenda conectado' : 'Não foi possível conectar') . '</h1><p>' . $m . '</p><p>Pode fechar esta janela e voltar ao sistema.</p></div>'
+           . '<script>try{window.opener&&window.opener.postMessage({tipo:"agenda-oauth",ok:' . ($ok ? 'true' : 'false') . '},location.origin);if(' . ($ok ? 'true' : 'false') . ')setTimeout(function(){window.close()},1500)}catch(e){}</script></body></html>';
+        exit;
+    };
+    $pend = is_file(gPendArq()) ? json_decode(file_get_contents(gPendArq()), true) : null;
+    $state = (string)($_GET['state'] ?? '');
+    if (!is_array($pend) || $state === '' || !hash_equals((string)$pend['state'], $state)) $pagina(false, 'O pedido de conexão não confere ou já foi usado. Clique de novo em "Entrar com Google" no sistema.');
+    @unlink(gPendArq()); // uso único
+    if (($pend['exp'] ?? 0) < time()) $pagina(false, 'O pedido de conexão expirou. Clique de novo em "Entrar com Google".');
+    if (!empty($_GET['error'])) $pagina(false, $_GET['error'] === 'access_denied' ? 'O acesso não foi autorizado na tela do Google.' : 'O Google devolveu: ' . (string)$_GET['error']);
+    $cli = gClienteDe(decifra($pend['cliente'] ?? ''));
+    $code = (string)($_GET['code'] ?? '');
+    if (!$cli || $code === '') $pagina(false, 'Resposta do Google incompleta.');
+    [$c, $j] = gHttp('POST', 'https://oauth2.googleapis.com/token', null, null,
+        ['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $cli['client_id'], 'client_secret' => $cli['client_secret'], 'redirect_uri' => $pend['retorno']]);
+    if ($c !== 200 || empty($j['access_token'])) $pagina(false, gErro($j, 'O Google não liberou o acesso'));
+    if (strpos((string)($j['scope'] ?? G_ESCOPO), 'auth/calendar') === false) $pagina(false, 'É preciso marcar a permissão de acesso ao Google Agenda na tela do Google.');
+    $refresh = $j['refresh_token'] ?? '';
+    $atual = gAgendaCfg();
+    if ($refresh === '' && $atual && ($atual['modo'] ?? '') === 'oauth') $refresh = (string)decifra($atual['refresh'] ?? '');
+    if ($refresh === '') $pagina(false, 'O Google não enviou a autorização permanente. Remova o acesso do app em myaccount.google.com/permissions e conecte de novo.');
+    [$c2, $cal] = gHttp('GET', 'https://www.googleapis.com/calendar/v3/calendars/primary', $j['access_token']);
+    if ($c2 !== 200) $pagina(false, gErro($cal, 'Não foi possível abrir a agenda da conta'));
+    $cfg = ['modo' => 'oauth', 'cliente' => cifra(json_encode($cli)), 'refresh' => cifra($refresh), 'agenda' => $cal['id'] ?? 'primary', 'conta' => $cal['id'] ?? '',
+            'nomeAgenda' => $cal['summary'] ?? '', 'atualizadoPor' => $pend['usuario'] ?? '', 'atualizadoEm' => date('c')];
+    if (!gGravaCfg($cfg)) $pagina(false, 'Não foi possível gravar a configuração no servidor.');
+    $pagina(true, 'A agenda de ' . ($cal['id'] ?? 'sua conta') . ' está ligada ao sistema. Reuniões novas podem ter link do Meet e convites.');
 }
 if ($acao === 'agendacfgremover') { @unlink(gAgendaArq()); sai(200, ['configurado' => false]); }
 if ($acao === 'agendaeventos') {
@@ -337,7 +427,7 @@ if ($acao === 'agendaeventos') {
     sai(200, ['eventos' => array_map('gParaItem', array_values(array_filter($j['items'] ?? [], function ($e) { return ($e['status'] ?? '') !== 'cancelled'; })))]);
 }
 if ($acao === 'agendasalvar') {
-    [$token, $agenda] = gContexto();
+    [$token, $agenda, $modo] = gContexto();
     $e = $in['evento'] ?? null;
     if (!is_array($e)) sai(400, ['erro' => 'Dados do compromisso ausentes.']);
     $titulo = mb_substr(trim((string)($e['titulo'] ?? '')), 0, 200);
@@ -363,15 +453,38 @@ if ($acao === 'agendasalvar') {
             'responsavel' => $resp, 'concluida' => $concluida ? '1' : '0', 'criadoPor' => mb_substr((string)($e['criadoPor'] ?? ''), 0, 80) ?: $usuario, 'atualizadoPor' => $usuario]]];
     $id = (string)($e['id'] ?? '');
     if ($id !== '' && !preg_match('/^[A-Za-z0-9_\-@.]{1,1024}$/', $id)) sai(400, ['erro' => 'Compromisso inválido.']);
-    [$code, $j] = $id !== '' ? gHttp('PATCH', gUrlEventos($agenda, $id), $token, $corpo) : gHttp('POST', gUrlEventos($agenda), $token, $corpo);
+    $qs = '';
+    if ($modo === 'oauth') {
+        // participantes recebem o convite por e-mail do próprio Google; o link do Meet é criado pelo Google Agenda
+        if (isset($e['participantes']) && is_array($e['participantes'])) {
+            $emails = [];
+            foreach ($e['participantes'] as $p) {
+                $m = strtolower(trim((string)(is_array($p) ? ($p['email'] ?? '') : $p)));
+                if ($m === '') continue;
+                if (!filter_var($m, FILTER_VALIDATE_EMAIL)) sai(400, ['erro' => 'E-mail de participante inválido: ' . $m]);
+                $emails[$m] = ['email' => $m];
+            }
+            if (count($emails) > 100) sai(400, ['erro' => 'No máximo 100 participantes.']);
+            $corpo['attendees'] = array_values($emails);
+        }
+        $avisar = !empty($e['enviarConvites']) && !empty($corpo['attendees']);
+        $qs = '?sendUpdates=' . ($avisar ? 'all' : 'none');
+        if (!empty($e['meet'])) {
+            $tem = false;
+            if ($id !== '') { [$cx, $ex] = gHttp('GET', gUrlEventos($agenda, $id), $token); $tem = $cx === 200 && gLinkMeet($ex) !== ''; }
+            if (!$tem) $corpo['conferenceData'] = ['createRequest' => ['requestId' => bin2hex(random_bytes(12)), 'conferenceSolutionKey' => ['type' => 'hangoutsMeet']]];
+            $qs .= '&conferenceDataVersion=1';
+        }
+    }
+    [$code, $j] = $id !== '' ? gHttp('PATCH', gUrlEventos($agenda, $id) . $qs, $token, $corpo) : gHttp('POST', gUrlEventos($agenda) . $qs, $token, $corpo);
     if ($code !== 200) sai(502, ['erro' => gErro($j, 'O Google não aceitou o compromisso')]);
     sai(200, ['evento' => gParaItem($j)]);
 }
 if ($acao === 'agendaexcluir') {
-    [$token, $agenda] = gContexto();
+    [$token, $agenda, $modo] = gContexto();
     $id = (string)($in['id'] ?? '');
     if (!preg_match('/^[A-Za-z0-9_\-@.]{1,1024}$/', $id)) sai(400, ['erro' => 'Compromisso inválido.']);
-    [$code, $j] = gHttp('DELETE', gUrlEventos($agenda, $id), $token);
+    [$code, $j] = gHttp('DELETE', gUrlEventos($agenda, $id) . ($modo === 'oauth' && !empty($in['avisar']) ? '?sendUpdates=all' : ''), $token);
     if ($code !== 204 && $code !== 200 && $code !== 410) sai(502, ['erro' => gErro($j, 'Não foi possível excluir no Google')]);
     sai(200, ['ok' => true]);
 }

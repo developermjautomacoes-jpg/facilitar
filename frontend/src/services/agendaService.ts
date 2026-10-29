@@ -10,6 +10,17 @@ export async function salvarConfigAgenda(chave: string | null, agenda: string): 
   return chamarApi<ConfigAgenda>("agendacfgsalvar", { corpo: { chave, agenda, usuario: usuarioAtual() } });
 }
 
+/** Endereço que o Google chama depois do login (cadastrar no Google Cloud como URI de redirecionamento). */
+export function enderecoRetornoGoogle(): string {
+  return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}google-retorno.php`;
+}
+
+/** Gera o endereço da tela de login do Google; cliente = conteúdo do JSON do cliente OAuth (ou null para manter o atual). */
+export async function iniciarLoginGoogle(cliente: string | null): Promise<string> {
+  const r = await chamarApi<{ url: string }>("agendaoauthiniciar", { corpo: { cliente, retorno: enderecoRetornoGoogle(), usuario: usuarioAtual() } });
+  return r.url;
+}
+
 export async function desconectarAgenda(): Promise<void> {
   await chamarApi("agendacfgremover", { corpo: {} });
 }
@@ -24,6 +35,6 @@ export async function salvarCompromisso(evento: CompromissoEntrada): Promise<Com
   return r.evento;
 }
 
-export async function excluirCompromisso(id: string): Promise<void> {
-  await chamarApi("agendaexcluir", { corpo: { id, usuario: usuarioAtual() } });
+export async function excluirCompromisso(id: string, avisar = false): Promise<void> {
+  await chamarApi("agendaexcluir", { corpo: { id, avisar, usuario: usuarioAtual() } });
 }

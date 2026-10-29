@@ -19,6 +19,16 @@ export interface Compromisso {
   link: string;
   doSistema: boolean;
   atualizado: string;
+  /** Link da sala do Google Meet (vazio se não houver) */
+  meet: string;
+  participantes: Participante[];
+}
+
+export interface Participante {
+  email: string;
+  nome: string;
+  /** needsAction | accepted | declined | tentative */
+  resposta: string;
 }
 
 /** Dados enviados para gravar: no dia inteiro, inicio/fim são datas (fim inclusivo); com horário, "AAAA-MM-DDTHH:MM". */
@@ -35,10 +45,17 @@ export interface CompromissoEntrada {
   responsavelId: string;
   responsavel: string;
   criadoPor?: string;
+  /** Só com login Google: e-mails convidados, criar sala do Meet e enviar convite por e-mail */
+  participantes?: string[];
+  meet?: boolean;
+  enviarConvites?: boolean;
 }
 
 export interface ConfigAgenda {
   configurado: boolean;
+  /** "oauth" = login com a conta Google (Meet e convites); "conta" = conta de serviço */
+  modo?: "oauth" | "conta";
+  conta?: string;
   agenda?: string;
   contaServico?: string;
   nomeAgenda?: string;
