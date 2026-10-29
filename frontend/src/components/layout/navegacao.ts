@@ -9,5 +9,9 @@ export const MENU: ItemMenu[] = [
   { rota: "/memorandos", rotulo: "Arquivo de memorandos", icone: "arquivo", descricao: "Memorandos salvos, situação e histórico" },
   { rota: "/colaboradores", rotulo: "Colaboradores", icone: "colaboradores", descricao: "Equipe e empresas vinculadas" },
   { rota: "/planejamento", rotulo: "Planejamento tributário", icone: "planejamento", descricao: "Simples × Presumido × Real com a reforma" },
+  { rota: "/precificacao", rotulo: "Precificação", icone: "preco", descricao: "Preço de venda com a reforma tributária" },
   { rota: "/configuracoes", rotulo: "Configurações", icone: "config", descricao: "Certificados digitais" },
 ];
+
+/** Páginas fora do menu, só para o título do cabeçalho. */
+export const PAGINAS: ItemMenu[] = [...MENU, { rota: "/perfil", rotulo: "Meu perfil", icone: "colaboradores", descricao: "Dados e foto do usuário" }];

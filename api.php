@@ -415,6 +415,42 @@ if ($acao === 'planejamento') {
     sai(200, ['html' => $html]);
 }
 
+// ---------- perfil do usuário (dados e foto), um arquivo por nome de usuário ----------
+$perfDir = $base . '/perfis';
+function perfilChave($nome) {
+    $n = mb_strtolower(trim((string)$nome));
+    $n = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $n) ?: $n;
+    $n = preg_replace('/[^a-z0-9]+/', '-', $n);
+    return trim($n, '-');
+}
+if ($acao === 'perfil') {
+    $k = perfilChave($_GET['usuario'] ?? '');
+    if ($k === '') sai(400, ['erro' => 'Usuário inválido.']);
+    $p = ler($perfDir . '/' . $k . '.json');
+    sai(200, ['perfil' => $p ?: null]);
+}
+if ($acao === 'perfilsalvar') {
+    $usuario = mb_substr(trim((string)($in['usuario'] ?? '')), 0, 80);
+    $k = perfilChave($usuario);
+    if ($k === '') sai(400, ['erro' => 'Usuário inválido.']);
+    $foto = (string)($in['foto'] ?? '');
+    if ($foto !== '' && (!preg_match('#^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$#', $foto) || strlen($foto) > 400000)) sai(400, ['erro' => 'Foto inválida ou grande demais.']);
+    if (!is_dir($perfDir) && !mkdir($perfDir, 0755, true)) sai(500, ['erro' => 'Não foi possível criar a pasta de perfis.']);
+    $atual = ler($perfDir . '/' . $k . '.json') ?: [];
+    $p = [
+        'usuario' => $usuario,
+        'nomeExibicao' => mb_substr(trim((string)($in['nomeExibicao'] ?? '')), 0, 80),
+        'cargo' => mb_substr(trim((string)($in['cargo'] ?? '')), 0, 80),
+        'email' => mb_substr(trim((string)($in['email'] ?? '')), 0, 120),
+        'telefone' => mb_substr(trim((string)($in['telefone'] ?? '')), 0, 40),
+        'foto' => $foto,
+        'criadoEm' => $atual['criadoEm'] ?? date('c'),
+        'atualizadoEm' => date('c'),
+    ];
+    if (!grava($perfDir . '/' . $k . '.json', $p)) sai(500, ['erro' => 'Não foi possível gravar o perfil.']);
+    sai(200, ['perfil' => $p]);
+}
+
 // ---------- planejamentos tributários salvos ----------
 $planDir = $base . '/planejamentos';
 function planIdValido($id) { return is_string($id) && preg_match('/^P\d{8}-\d{6}-[a-f0-9]{6}$/', $id); }

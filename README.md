@@ -22,7 +22,7 @@ frontend/
     types/                   tipos compartilhados (memorando, colaborador, certificado, planejamento, auth)
     lib/                     formatadores e regras puras (format, memorando, storage, constantes, files)
     services/                camada de acesso ao api.php (http + um serviço por domínio)
-    components/ui/           componentes reutilizáveis (Button, Card, Field, Badge, KpiCard, DataTable, Modal, ConfirmDialog, Toast, BarList, PageHeader, Notice, Loading, Icon, EmptyState)
+    components/ui/           componentes reutilizáveis (Button, Card, Field, Badge, KpiCard, DataTable, Modal, ConfirmDialog, Toast, BarList, PageHeader, Notice, Loading, Icon, EmptyState, Avatar, ImageCropper, NumberInput)
     components/layout/       AppLayout, Sidebar (logo Facilitar), Header (perfil do usuário), Footer (NEEKO), navegação
     features/                um módulo de negócio por pasta
       auth/                  login e contexto de autenticação
@@ -31,6 +31,8 @@ frontend/
       colaboradores/         cadastro e empresas vinculadas
       configuracoes/         certificados digitais
       planejamento/          planejamento tributário salvo no servidor
+      precificacao/          preço de venda (produto e serviço) com CBS/IBS e transição 2026-2035
+      perfil/                perfil do usuário (nome, cargo, contato e foto com zoom e enquadramento)
 ```
 
 ### Regras de arquitetura
@@ -51,9 +53,15 @@ Autenticação: senha única da equipe (`SENHA_ACESSO`) enviada no cabeçalho `X
 | `colaboradoresService` | `colabs`, `colabsalvar`, `colabexcluir` | Colaboradores, Painel |
 | `certificadosService` | `certlistar`, `certenviar`, `certpadrao`, `certremover` | Configurações |
 | `planejamentoService` | `planejamento`, `planlistar`, `planler`, `plansalvar`, `planexcluir` | Planejamento tributário |
+| `perfilService` | `perfil`, `perfilsalvar` | Meu perfil, cabeçalho |
 | módulo legado (`legado/index.html`) | `salvar`, `cnpj`, `ie`, `colabs`, `certlistar`, `listar` | Novo / editar / visualizar memorando, PDF e Word |
 
-Nenhum endpoint novo foi criado para o front-end. O formulário do memorando continua no módulo legado (aberto em `#/memorandos/novo` e `#/memorandos/<id>/<editar|ver|pdf|docx>`): ele avisa o front-end ao salvar (`postMessage` "memo-salvo") e o arquivo é recarregado.
+Endpoints novos: `perfil` (GET `?usuario=`) e `perfilsalvar` (POST `{usuario, nomeExibicao, cargo, email, telefone, foto}`), autenticados por `X-Senha`. O perfil fica em `DADOS_DIR/perfis/<usuario>.json`; a foto é recortada no navegador (JPEG 320×320, até ~300 KB) e gravada como data URL. Não há outros endpoints novos.
+
+### Precificação
+`#/precificacao` (também pelo botão no Planejamento) calcula o preço de venda pelo método do divisor para Simples puro, Simples híbrido, Lucro Presumido e Lucro Real, no ano escolhido (2026 a 2035). A regra é toda no navegador (`features/precificacao/precificacaoCalc.ts`), com as alíquotas da transição em `src/lib/reforma.ts`: CBS de referência 11,3% (TCU, 28/10/2026), cobrada com −0,1 ponto em 2027-2028 (art. 347), IBS 0,1% de teste e proporcional de 2029 a 2032, ICMS/ISS a 90/80/70/60% de 2029 a 2032 e extintos em 2033, PIS/COFINS só em 2026. CBS/IBS por fora, sobre o preço sem ICMS/ISS (LC 214, art. 12, V). A base legal aparece no rodapé da tela.
+
+O formulário do memorando O formulário do memorando continua no módulo legado (aberto em `#/memorandos/novo` e `#/memorandos/<id>/<editar|ver|pdf|docx>`): ele avisa o front-end ao salvar (`postMessage` "memo-salvo") e o arquivo é recarregado.
 
 ## Desenvolvimento
 

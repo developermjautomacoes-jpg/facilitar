@@ -13,6 +13,7 @@
 .tabela .centro { text-align: center; }
 .vazio { text-align: center; color: var(--color-text-muted); padding: var(--space-8) !important; }
 .apagada td { color: var(--color-text-muted); }
+.destaque td { background: var(--color-gold-100); font-weight: var(--weight-semibold); }
 
 /* no celular, cada linha vira um bloco com o título da coluna */
 @media (max-width: 640px) {

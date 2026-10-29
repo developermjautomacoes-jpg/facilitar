@@ -1,0 +1,14 @@
+.grade { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+.form, .resultado { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.campos { display: flex; flex-direction: column; gap: var(--space-3); }
+.tipo { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.tipo button { border: var(--border-width) solid var(--color-border); background: var(--color-surface); border-radius: var(--radius-pill); padding: 8px 10px; font-weight: var(--weight-semibold); font-size: var(--text-sm); cursor: pointer; color: var(--color-text-muted); }
+.tipo .on { border-color: var(--color-navy-700); background: var(--color-navy-700); color: var(--color-text-inverse); }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: var(--space-3); }
+.legal { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-text-muted); }
+.t_custo { font-weight: var(--weight-semibold); }
+.t_tributo { color: var(--color-navy-700); }
+.t_despesa { color: var(--color-text-muted); }
+.t_lucro { color: var(--color-success); font-weight: var(--weight-semibold); }
+.t_fora { color: var(--color-gold-600); font-weight: var(--weight-semibold); }
+@media (max-width: 1080px) { .grade { grid-template-columns: 1fr; } }

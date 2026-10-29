@@ -13,3 +13,6 @@ export * from "./BarList";
 export * from "./Loading";
 export * from "./Notice";
 export * from "./Icon";
+export * from "./Avatar";
+export * from "./ImageCropper";
+export * from "./NumberInput";
