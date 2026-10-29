@@ -33,6 +33,9 @@
   --color-danger-bg: #f8e4e2;
   --color-info: #1f63a8;
   --color-info-bg: #e2edf8;
+  --agenda-reuniao: #1f63a8;
+  --agenda-tarefa: #b8913a;
+  --agenda-evento: #2e7d4f;
 
   /* gráficos */
   --chart-in: #1f63a8;

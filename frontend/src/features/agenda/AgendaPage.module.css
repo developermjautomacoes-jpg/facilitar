@@ -1,0 +1,57 @@
+.barra { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.nav { display: flex; align-items: center; gap: var(--space-2); }
+.mes { margin: 0 0 0 var(--space-2); font-size: var(--text-lg); color: var(--color-navy-700); }
+.filtros { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.filtro { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: var(--radius-pill); border: var(--border-width) solid var(--color-border); background: var(--color-surface); font: inherit; font-size: var(--text-sm); color: var(--color-text-muted); cursor: pointer; }
+.filtro i { width: 9px; height: 9px; border-radius: 50%; background: var(--color-border-strong); }
+.filtro.on { color: var(--color-text); border-color: var(--color-border-strong); }
+.filtro.on.reuniao i { background: var(--agenda-reuniao); }
+.filtro.on.tarefa i { background: var(--agenda-tarefa); }
+.filtro.on.evento i { background: var(--agenda-evento); }
+.select { font: inherit; font-size: var(--text-sm); padding: 5px 8px; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); }
+.visoes { display: inline-flex; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; }
+.visoes button { font: inherit; font-size: var(--text-sm); padding: 5px 12px; border: 0; background: var(--color-surface); cursor: pointer; color: var(--color-text-muted); }
+.visoes .ativa { background: var(--color-navy-700); color: #fff; }
+.filtro:focus-visible, .visoes button:focus-visible, .dia:focus-visible, .chip:focus-visible, .nome:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.calendario { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--color-border); gap: 1px; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.cab { background: var(--color-surface-2); text-align: center; font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-text-muted); padding: 6px 0; text-transform: uppercase; letter-spacing: .04em; }
+.dia { background: var(--color-surface); min-height: 112px; padding: 4px 5px 6px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-width: 0; }
+.dia:hover { background: #fbfcfe; }
+.fora { background: var(--color-surface-2); }
+.fora .num { color: var(--color-border-strong); }
+.num { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-text-muted); width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; }
+.hoje .num { background: var(--color-navy-700); color: #fff; }
+.chip { display: flex; gap: 4px; align-items: baseline; width: 100%; min-width: 0; text-align: left; border: 0; border-left: 3px solid; border-radius: 3px; padding: 2px 5px; font: inherit; font-size: 11.5px; line-height: 1.35; cursor: pointer; }
+.chip.reuniao { border-color: var(--agenda-reuniao); background: var(--color-info-bg); }
+.chip.tarefa { border-color: var(--agenda-tarefa); background: #f6eedb; }
+.chip.evento { border-color: var(--agenda-evento); background: var(--color-success-bg); }
+.hora { font-weight: var(--weight-semibold); color: var(--color-text-muted); flex: none; }
+.tit { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); }
+.feito .tit, .feito .nome b { text-decoration: line-through; color: var(--color-text-muted); }
+.chipLongo { font-size: var(--text-sm); }
+.mais { border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--color-navy-600); text-align: left; padding: 0 5px; cursor: pointer; font-weight: var(--weight-semibold); }
+
+.lista { display: flex; flex-direction: column; gap: var(--space-4); }
+.grupo { background: var(--color-surface); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.data { margin: 0; padding: 8px 14px; font-size: var(--text-sm); font-weight: 400; background: var(--color-surface-2); border-bottom: var(--border-width) solid var(--color-border); color: var(--color-text-muted); }
+.data b { color: var(--color-navy-700); margin-right: 4px; }
+.linha { display: grid; grid-template-columns: 20px 92px minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: 9px 14px; border-left: 4px solid transparent; }
+.linha + .linha { border-top: var(--border-width) solid var(--color-border); }
+.linha.reuniao { border-left-color: var(--agenda-reuniao); }
+.linha.tarefa { border-left-color: var(--agenda-tarefa); }
+.linha.evento { border-left-color: var(--agenda-evento); }
+.ponto { width: 10px; height: 10px; border-radius: 50%; justify-self: center; background: var(--color-border-strong); }
+.reuniao .ponto { background: var(--agenda-reuniao); }
+.evento .ponto { background: var(--agenda-evento); }
+.ok { width: 17px; height: 17px; accent-color: var(--agenda-tarefa); cursor: pointer; margin: 0; }
+.quando { font-size: var(--text-sm); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.nome { border: 0; background: none; font: inherit; text-align: left; cursor: pointer; padding: 0; display: flex; flex-direction: column; min-width: 0; color: var(--color-text); }
+.nome small { color: var(--color-text-muted); font-size: var(--text-xs); }
+
+@media (max-width: 760px) {
+  .dia { min-height: 64px; }
+  .chip .hora { display: none; }
+  .chip { font-size: 10.5px; padding: 1px 3px; }
+  .linha { grid-template-columns: 20px 74px minmax(0, 1fr); }
+}
