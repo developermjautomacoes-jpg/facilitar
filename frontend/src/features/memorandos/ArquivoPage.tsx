@@ -7,6 +7,7 @@ import { clienteInativo, memorandoAtivo, textoBusca } from "@/lib/memorando";
 import { alterarStatus, excluirMemorando, reativarCliente, registrarSaida } from "@/services/memorandosService";
 import { MemorandoItem, type AcaoMemorando } from "./components/MemorandoItem";
 import { SaidaClienteModal } from "./components/SaidaClienteModal";
+import { ImportarMemorandosModal } from "./components/ImportarMemorandosModal";
 import { useMemorandos } from "./MemorandosContext";
 import styles from "./ArquivoPage.module.css";
 
@@ -23,6 +24,7 @@ export function ArquivoPage() {
   const [confirmacao, setConfirmacao] = useState<Confirmacao>(null);
   const [saida, setSaida] = useState<Memorando | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [importar, setImportar] = useState(false);
 
   const anos = useMemo(() => [...new Set(memorandos.map((d) => d.ano))].sort((a, b) => b - a), [memorandos]);
   const lista = useMemo(() => {
@@ -71,7 +73,10 @@ export function ArquivoPage() {
   return (
     <>
       <PageHeader titulo="Arquivo de memorandos" descricao="Pesquise, visualize, edite e acompanhe a situação de cada cliente."
-        acoes={<Button variante="primary" icone={<Icon nome="mais" />} onClick={() => navegar("/memorandos/novo")}>Novo memorando</Button>} />
+        acoes={<>
+          <Button icone={<Icon nome="arquivo" />} onClick={() => setImportar(true)}>Importar memorandos antigos</Button>
+          <Button variante="primary" icone={<Icon nome="mais" />} onClick={() => navegar("/memorandos/novo")}>Novo memorando</Button>
+        </>} />
       <div className={styles.filtros}>
         <Input rotulo="Pesquisar" type="search" placeholder="Número, empresa, fantasia, CNPJ, regime ou responsável" value={busca} onChange={(e) => setBusca(e.target.value)} />
         <Select rotulo="Ano" value={ano} onChange={(e) => setAno(e.target.value)}>
@@ -103,6 +108,8 @@ export function ArquivoPage() {
         onConfirmar={confirmar} onCancelar={() => setConfirmacao(null)}>
         <p><b>{confirmacao?.d.e_razao}</b></p><p>{textos?.c}</p>
       </ConfirmDialog>
+      <ImportarMemorandosModal aberto={importar} memorandos={memorandos} onFechar={() => setImportar(false)}
+        onConcluido={() => { void recarregar(); avisar("Memorandos importados para o arquivo.", "sucesso"); }} />
       <SaidaClienteModal memorando={saida} salvando={salvando} onCancelar={() => setSaida(null)} onConfirmar={registrar} />
     </>
   );

@@ -352,7 +352,9 @@ if ($acao === 'salvar') {
         $memo['criadoEm'] = $agora;
         $memo['criadoPorNome'] = $usuario;
         $memo['status'] = 'ativo';
-        $hist = [['acao' => 'Criou o memorando', 'por' => $usuario, 'em' => $agora]];
+        // importação de memorandos antigos registra a origem no histórico
+        $acaoCriou = mb_substr(trim((string)($in['acaoCriou'] ?? '')), 0, 160);
+        $hist = [['acao' => $acaoCriou !== '' ? $acaoCriou : 'Criou o memorando', 'por' => $usuario, 'em' => $agora]];
     }
     if ($seq < 1 || $seq > 9999 || $ano < 2000 || $ano > 2100) sai(400, ['erro' => 'Número inválido.']);
     $novoId = idDe($seq, $ano);

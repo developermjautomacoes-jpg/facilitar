@@ -22,3 +22,16 @@ export async function reativarCliente(id: string): Promise<void> {
 export async function excluirMemorando(id: string): Promise<void> {
   await chamarApi("excluir", { corpo: { id, usuario: usuarioAtual() } });
 }
+
+/** Cadastra um memorando importado de arquivo antigo (ação "salvar" do api.php, criando um novo). */
+export async function importarMemorando(memo: Partial<Memorando>, numero: { seq: number; ano: number } | null, anoAuto: number, arquivo: string): Promise<Memorando> {
+  const r = await chamarApi<{ memo: Memorando }>("salvar", {
+    corpo: { id: null, numero, anoAuto, usuario: usuarioAtual(), acaoCriou: `Importou do memorando antigo (${arquivo})`, alteracoes: [], memo },
+  });
+  return r.memo;
+}
+
+/** Consulta o CNPJ pelo servidor (BrasilAPI, com ReceitaWS de alternativa); devolve o JSON da fonte. */
+export async function consultarCnpj(cnpj: string): Promise<Record<string, unknown>> {
+  return chamarApi<Record<string, unknown>>("cnpj", { query: { cnpj } });
+}
