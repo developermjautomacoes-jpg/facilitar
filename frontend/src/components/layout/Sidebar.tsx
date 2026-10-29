@@ -18,10 +18,6 @@ export function Sidebar({ aberta, onNavegar }: { aberta: boolean; onNavegar: () 
           </NavLink>
         ))}
       </nav>
-      <div className={styles.rodape}>
-        <span>Facilitar Serviços Contábeis</span>
-        <span className={styles.neeko}>Produzido por <b>NEEKO</b> Automação Inteligente</span>
-      </div>
     </aside>
   );
 }
