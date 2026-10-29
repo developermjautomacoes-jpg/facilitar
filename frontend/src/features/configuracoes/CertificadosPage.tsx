@@ -4,6 +4,7 @@ import { Badge, Button, Card, ConfirmDialog, DataTable, Input, Loading, Notice, 
 import { arquivoParaBase64 } from "@/lib/files";
 import { dataBr, dataHora } from "@/lib/format";
 import { definirPadrao, enviarCertificado, listarCertificados, removerCertificado } from "@/services/certificadosService";
+import { GoogleAgendaCard } from "./GoogleAgendaCard";
 import styles from "./CertificadosPage.module.css";
 
 export function CertificadosPage() {
@@ -47,7 +48,7 @@ export function CertificadosPage() {
 
   return (
     <>
-      <PageHeader titulo="Configurações" descricao="Certificados digitais usados para consultar a inscrição estadual na SEFAZ. O arquivo fica só no servidor e a senha fica cifrada." />
+      <PageHeader titulo="Configurações" descricao="Certificados digitais para consultar a inscrição estadual na SEFAZ e conexão com o Google Agenda. Arquivos e chaves ficam só no servidor, cifrados." />
       {erro && <Notice tom="erro">{erro}</Notice>}
       <div className={styles.grade}>
         <Card titulo="Certificados digitais" semPadding>
@@ -77,6 +78,7 @@ export function CertificadosPage() {
           </div>
         </Card>
       </div>
+      <div className={styles.agenda}><GoogleAgendaCard avisar={avisar} /></div>
       <ConfirmDialog aberto={!!removendo} titulo="Remover certificado" confirmar="Remover" perigo onConfirmar={remover} onCancelar={() => setRemovendo(null)}>
         <p>Remover o certificado de <b>{removendo?.apelido || removendo?.titular}</b> do servidor?</p>
       </ConfirmDialog>

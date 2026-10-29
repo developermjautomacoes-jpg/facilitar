@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/features/auth/AuthContext";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { ColaboradoresPage } from "@/features/colaboradores/ColaboradoresPage";
 import { CertificadosPage } from "@/features/configuracoes/CertificadosPage";
+import { AgendaPage } from "@/features/agenda/AgendaPage";
 import { ArquivoPage } from "@/features/memorandos/ArquivoPage";
 import { MemorandoEditorPage } from "@/features/memorandos/MemorandoEditorPage";
 import { MemorandosProvider } from "@/features/memorandos/MemorandosContext";
@@ -24,6 +25,7 @@ function Rotas() {
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/painel" replace />} />
           <Route path="painel" element={<PainelPage />} />
+          <Route path="agenda" element={<AgendaPage />} />
           <Route path="memorandos" element={<ArquivoPage />} />
           <Route path="memorandos/novo" element={<MemorandoEditorPage />} />
           <Route path="memorandos/:id/:acao" element={<MemorandoEditorPage />} />
