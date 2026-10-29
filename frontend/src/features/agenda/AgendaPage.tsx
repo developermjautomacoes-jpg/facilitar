@@ -7,7 +7,7 @@ import { DIAS_SEMANA, diasDoCompromisso, gradeDoMes, horaDe, horaFim, ordenar, r
 import { MESES } from "@/lib/constantes";
 import { dataBr, hojeISO } from "@/lib/format";
 import { ApiError } from "@/services/http";
-import { excluirCompromisso, listarCompromissos, salvarCompromisso } from "@/services/agendaService";
+import { configAgenda, excluirCompromisso, listarCompromissos, salvarCompromisso } from "@/services/agendaService";
 import { CompromissoModal } from "./components/CompromissoModal";
 import styles from "./AgendaPage.module.css";
 
@@ -29,6 +29,8 @@ export function AgendaPage() {
   const [modal, setModal] = useState<{ c: Compromisso | null; dia: string } | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState<Compromisso | null>(null);
+  const [comMeet, setComMeet] = useState(false);
+  useEffect(() => { configAgenda().then((c) => setComMeet(c.configurado && c.modo === "oauth")).catch(() => setComMeet(false)); }, []);
 
   const grade = useMemo(() => gradeDoMes(ref.ano, ref.mes), [ref]);
   const faixa = useMemo(() => visao === "mes" ? { de: grade[0], ate: grade[41] } : { de: hoje, ate: somarDias(hoje, 60) }, [visao, grade, hoje]);
@@ -65,7 +67,8 @@ export function AgendaPage() {
       const salvo = await salvarCompromisso(e);
       setItens((l) => [...l.filter((x) => x.id !== salvo.id), salvo]);
       setModal(null);
-      avisar(e.id ? "Compromisso atualizado no Google Agenda." : "Compromisso criado no Google Agenda.", "sucesso");
+      const convidou = !!e.enviarConvites && !!e.participantes?.length;
+      avisar(`${e.id ? "Compromisso atualizado" : "Compromisso criado"} no Google Agenda${salvo.meet && !modal?.c?.meet ? " com link do Meet" : ""}${convidou ? "; convites enviados" : ""}.`, "sucesso");
     } catch (err) { avisar(err instanceof Error ? err.message : "Não foi possível salvar.", "erro"); }
     finally { setSalvando(false); }
   }
@@ -83,7 +86,7 @@ export function AgendaPage() {
   }
   async function excluir() {
     if (!excluindo) return;
-    try { await excluirCompromisso(excluindo.id); setItens((l) => l.filter((x) => x.id !== excluindo.id)); setModal(null); avisar("Compromisso excluído.", "sucesso"); }
+    try { await excluirCompromisso(excluindo.id, comMeet && excluindo.participantes.length > 0); setItens((l) => l.filter((x) => x.id !== excluindo.id)); setModal(null); avisar("Compromisso excluído.", "sucesso"); }
     catch (err) { avisar(err instanceof Error ? err.message : "Não foi possível excluir.", "erro"); }
     finally { setExcluindo(null); }
   }
@@ -91,7 +94,7 @@ export function AgendaPage() {
   const chip = (c: Compromisso, compacto: boolean) => (
     <button key={c.id} type="button" className={[styles.chip, styles[c.tipo], c.concluida ? styles.feito : "", compacto ? "" : styles.chipLongo].join(" ")}
       title={`${rotuloTipo(c.tipo)}: ${c.titulo}${c.responsavel ? ` · ${c.responsavel}` : ""}`} onClick={(ev) => { ev.stopPropagation(); setModal({ c, dia: c.inicio.slice(0, 10) }); }}>
-      {horaDe(c) && <span className={styles.hora}>{horaDe(c)}</span>}<span className={styles.tit}>{c.titulo}</span>
+      {c.meet && <span className={styles.cam} aria-label="com Meet"><Icon nome="video" tamanho={11} /></span>}{horaDe(c) && <span className={styles.hora}>{horaDe(c)}</span>}<span className={styles.tit}>{c.titulo}</span>
     </button>
   );
 
@@ -171,8 +174,9 @@ export function AgendaPage() {
                     <span className={styles.quando}>{c.diaInteiro ? "Dia inteiro" : `${horaDe(c)}–${horaFim(c)}`}</span>
                     <button type="button" className={styles.nome} onClick={() => setModal({ c, dia: d })}>
                       <b>{c.titulo}</b>
-                      <small>{[rotuloTipo(c.tipo), c.responsavel, c.local].filter(Boolean).join(" · ")}</small>
+                      <small>{[rotuloTipo(c.tipo), c.responsavel, c.local, c.participantes.length ? `${c.participantes.length} convidado(s)` : ""].filter(Boolean).join(" · ")}</small>
                     </button>
+                    {c.meet && <a className={styles.meet} href={c.meet} target="_blank" rel="noopener noreferrer"><Icon nome="video" tamanho={16} /> Meet</a>}
                   </div>
                 ))}
               </section>
@@ -182,9 +186,9 @@ export function AgendaPage() {
       )}
 
       <CompromissoModal aberto={!!modal} compromisso={modal?.c ?? null} diaInicial={modal?.dia ?? hoje} colaboradores={colaboradores}
-        salvando={salvando} onSalvar={salvar} onExcluir={(c) => setExcluindo(c)} onFechar={() => setModal(null)} />
+        salvando={salvando} comMeet={comMeet} onSalvar={salvar} onExcluir={(c) => setExcluindo(c)} onFechar={() => setModal(null)} />
       <ConfirmDialog aberto={!!excluindo} titulo="Excluir compromisso" confirmar="Excluir" perigo onConfirmar={excluir} onCancelar={() => setExcluindo(null)}>
-        <p>Excluir <b>{excluindo?.titulo}</b>? Ele também sai do Google Agenda.</p>
+        <p>Excluir <b>{excluindo?.titulo}</b>? Ele também sai do Google Agenda.{comMeet && !!excluindo?.participantes.length && " Os participantes recebem o aviso de cancelamento."}</p>
       </ConfirmDialog>
     </>
   );

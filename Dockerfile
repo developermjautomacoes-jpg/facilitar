@@ -13,8 +13,8 @@ FROM php:8.3-apache
 # Na raiz e em /memorandos (funciona com ou sem caminho no domínio)
 COPY --from=frontend /app/dist/ /var/www/html/
 COPY --from=frontend /app/dist/ /var/www/html/memorandos/
-COPY api.php /var/www/html/
-COPY api.php /var/www/html/memorandos/
+COPY api.php google-retorno.php /var/www/html/
+COPY api.php google-retorno.php /var/www/html/memorandos/
 # Formulário do memorando (consulta CNPJ/IE, prévia, PDF e Word), aberto pelo front-end em modo embutido
 COPY legado/index.html /var/www/html/legado/index.html
 COPY legado/index.html /var/www/html/memorandos/legado/index.html

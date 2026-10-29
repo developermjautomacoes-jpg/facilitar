@@ -16,3 +16,12 @@
 .esquerda { margin-right: auto; }
 .google { align-self: center; font-size: var(--text-sm); color: var(--color-navy-600); margin-right: var(--space-2); }
 @media (max-width: 560px) { .datas, .datas2 { grid-template-columns: 1fr; } }
+.meetBox { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: var(--border-width) solid var(--color-info-bg); background: #f5f9fd; border-radius: var(--radius-md); }
+.meetLink { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--text-sm); color: var(--agenda-reuniao); }
+.meetLink a { color: var(--agenda-reuniao); font-weight: var(--weight-semibold); margin-right: auto; word-break: break-all; }
+.respostas { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; font-size: var(--text-xs); }
+.respostas li { display: inline-flex; gap: 6px; align-items: center; padding: 3px 8px; border-radius: var(--radius-pill); background: var(--color-surface); border: var(--border-width) solid var(--color-border); }
+.respostas span { font-weight: var(--weight-semibold); color: var(--color-text-muted); }
+.respostas .r_accepted { color: var(--color-success); }
+.respostas .r_declined { color: var(--color-danger); }
+.respostas .r_tentative { color: var(--agenda-tarefa); }
