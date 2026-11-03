@@ -64,6 +64,9 @@ Endpoints novos: `perfil` (GET `?usuario=`) e `perfilsalvar` (POST `{usuario, no
 ### Importação de memorandos antigos
 `lib/importarMemorando.ts` aceita dois modelos de .docx: o que abre com "Em 10 de março de 2025" e "Aos setores de ...", e o de rótulos numerados, que abre com "Data:29/08/2025" e termina em "CONSIDERAÇÕES GERAIS". CNAE com número de dígitos errado não é adivinhado: gera aviso e vai para as observações.
 
+### Importação do Acessórias
+`lib/importarAcessorias.ts` lê o relatório de empresas (.csv com ";") pelo nome das colunas. Regime, pró-labore e folha saem da coluna Regime; os responsáveis vão para os departamentos; o que não tem campo próprio vai para as observações. Como o relatório vem sem "Cli. desde", "Cliente desde" usa a data de Cadastro. CNPJ já no sistema fica desmarcado.
+
 ### Atualização em lote pelo CNPJ
 No Arquivo, os memorandos marcados são consultados um a um (`lib/atualizarMemorando.ts`, mesma regra do quadro do formulário). A tela mostra as diferenças, e só o que continuar marcado é gravado pela ação `salvar`, com registro no histórico.
 

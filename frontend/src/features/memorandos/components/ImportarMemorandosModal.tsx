@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import type { Memorando } from "@/types";
 import { Badge, Button, DataTable, Modal, Notice, type Coluna } from "@/components/ui";
 import { linhasDoDocx } from "@/lib/docx";
+import { memorandosDoCsv, textoDoCsv } from "@/lib/importarAcessorias";
 import { dataBr, digitos, hojeISO, numeroMemorando } from "@/lib/format";
 import { completarComReceita, memorandoDeLinhas, type MemorandoImportado } from "@/lib/importarMemorando";
 import { ApiError } from "@/services/http";
@@ -43,15 +44,17 @@ export function ImportarMemorandosModal({ aberto, memorandos, onFechar, onConclu
   }
 
   async function lerArquivos(lista: FileList | File[]) {
-    const arquivos = [...lista].filter((f) => /\.docx?$/i.test(f.name));
+    const arquivos = [...lista].filter((f) => /\.(docx?|csv)$/i.test(f.name));
     if (!arquivos.length) return;
     setLendo(true);
     const novos: Item[] = [];
+    const adiciona = (chave: string, dados: MemorandoImportado) => novos.push({ chave, dados, marcado: !dados.erro, numeroLivre: true, situacao: "pronto" });
     for (const f of arquivos) {
-      let dados: MemorandoImportado;
-      try { dados = memorandoDeLinhas(await linhasDoDocx(f), f.name); }
-      catch (e) { dados = { arquivo: f.name, memo: {}, seq: null, ano: null, avisos: [], erro: e instanceof Error ? e.message : "Não foi possível ler o arquivo." }; }
-      novos.push({ chave: `${f.name}-${f.size}-${f.lastModified}`, dados, marcado: !dados.erro, numeroLivre: true, situacao: "pronto" });
+      const chave = `${f.name}-${f.size}-${f.lastModified}`;
+      try {
+        if (/\.csv$/i.test(f.name)) memorandosDoCsv(await textoDoCsv(f), f.name).forEach((d, i) => adiciona(`${chave}-${i}`, d));
+        else adiciona(chave, memorandoDeLinhas(await linhasDoDocx(f), f.name));
+      } catch (e) { adiciona(chave, { arquivo: f.name, memo: {}, seq: null, ano: null, avisos: [], erro: e instanceof Error ? e.message : "Não foi possível ler o arquivo." }); }
     }
     setItens((atuais) => revisar([...atuais.filter((a) => !novos.some((n) => n.chave === a.chave)), ...novos]));
     setLendo(false);
@@ -82,16 +85,17 @@ export function ImportarMemorandosModal({ aberto, memorandos, onFechar, onConclu
       if (completar) {
         try { const feito = completarComReceita(memo, await consultarCnpj(digitos(memo.e_cnpj))); if (feito.length) notas.push("Receita: " + feito.join(", ")); }
         catch { notas.push("Receita indisponível: importado só com os dados do arquivo"); }
-        await espera(350);
+        await espera(1000); // as bases públicas limitam consultas em sequência
       }
       const { seq, ano } = alvo.dados;
       const numero = manterNumero && alvo.numeroLivre && seq && ano ? { seq, ano } : null;
+      const acao = alvo.dados.origem ?? `Importou do memorando antigo (${alvo.dados.arquivo})`;
       const anoAuto = ano || Number(String(memo.m_data || hojeISO()).slice(0, 4));
       try {
         let salvo: Memorando;
-        try { salvo = await importarMemorando(memo, numero, anoAuto, alvo.dados.arquivo); }
+        try { salvo = await importarMemorando(memo, numero, anoAuto, acao); }
         catch (e) {
-          if (numero && e instanceof ApiError && e.status === 409) { salvo = await importarMemorando(memo, null, anoAuto, alvo.dados.arquivo); notas.unshift("número já usado: renumerado"); }
+          if (numero && e instanceof ApiError && e.status === 409) { salvo = await importarMemorando(memo, null, anoAuto, acao); notas.unshift("número já usado: renumerado"); }
           else throw e;
         }
         setItens((l) => l.map((i) => (i.chave === alvo.chave ? { ...i, situacao: "importado", resultado: `Nº ${numeroMemorando(salvo.seq, salvo.ano)}${notas.length ? " · " + notas.join(" · ") : ""}` } : i)));
@@ -114,7 +118,7 @@ export function ImportarMemorandosModal({ aberto, memorandos, onFechar, onConclu
       if (!seq || !ano) return <span className={styles.muted}>automático</span>;
       return <span className={!i.numeroLivre || !manterNumero ? styles.riscado : undefined} title={!i.numeroLivre ? "Número já usado: será renumerado" : undefined}>{numeroMemorando(seq, ano)}</span>;
     } },
-    { chave: "emp", titulo: "Empresa", render: (i) => <div className={styles.emp}><b>{i.dados.memo.e_razao || "—"}</b><span>{i.dados.memo.e_cnpj || ""}{i.dados.memo.m_data ? ` · ${dataBr(i.dados.memo.m_data)}` : ""}</span><small>{i.dados.arquivo}</small></div> },
+    { chave: "emp", titulo: "Empresa", render: (i) => <div className={styles.emp}><b>{i.dados.memo.e_razao || "—"}</b><span>{i.dados.memo.e_cnpj || ""}{i.dados.memo.m_data ? ` · ${dataBr(i.dados.memo.m_data)}` : ""}</span><small>{i.dados.origem ? "Acessórias" : i.dados.arquivo}</small></div> },
     { chave: "reg", titulo: "Regime", render: (i) => i.dados.memo.t_regime || <span className={styles.muted}>a informar</span> },
     { chave: "sit", titulo: "Situação", render: (i) => (
       <div className={styles.sit}>
@@ -134,7 +138,7 @@ export function ImportarMemorandosModal({ aberto, memorandos, onFechar, onConclu
   ], [importando, manterNumero]);
 
   return (
-    <Modal aberto={aberto} onFechar={fechar} largura="lg" titulo="Importar memorandos antigos"
+    <Modal aberto={aberto} onFechar={fechar} largura="lg" titulo="Importar memorandos"
       rodape={concluiu ? <Button variante="primary" onClick={fechar}>Concluir ({totalImportados} importado{totalImportados === 1 ? "" : "s"})</Button> : <>
         <Button onClick={fechar} disabled={importando}>Cancelar</Button>
         <Button variante="primary" carregando={importando} disabled={!selecionados.length || lendo} onClick={() => void importar()}>
@@ -145,22 +149,22 @@ export function ImportarMemorandosModal({ aberto, memorandos, onFechar, onConclu
         <div className={[styles.zona, arrastando ? styles.zonaAtiva : ""].join(" ")}
           onDragOver={(e) => { e.preventDefault(); setArrastando(true); }} onDragLeave={() => setArrastando(false)}
           onDrop={(e) => { e.preventDefault(); setArrastando(false); void lerArquivos(e.dataTransfer.files); }}>
-          <p><b>Arraste os arquivos .docx aqui</b> ou</p>
+          <p><b>Arraste os arquivos .docx ou .csv aqui</b> ou</p>
           <Button variante="primary" disabled={importando || lendo} onClick={() => entrada.current?.click()}>{lendo ? "Lendo arquivos…" : "Escolher arquivos"}</Button>
-          <input ref={entrada} type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden
+          <input ref={entrada} type="file" accept=".docx,.csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv" multiple hidden
             onChange={(e) => { if (e.target.files) void lerArquivos(e.target.files); e.target.value = ""; }} />
-          <small>Memorandos no modelo antigo do Word (Nome, Nome Fantasia, CNPJ, Opção Tributária…). Pode selecionar vários de uma vez.</small>
+          <small>Memorandos do Word (.docx) ou relatório de empresas do Acessórias (.csv). Pode selecionar vários de uma vez.</small>
         </div>
 
         {itens.length > 0 && <>
           <div className={styles.opcoes}>
             <label><input type="checkbox" checked={manterNumero} disabled={importando} onChange={(e) => setManterNumero(e.target.checked)} /> Manter o número do arquivo (quando estiver livre)</label>
             <label><input type="checkbox" checked={completar} disabled={importando} onChange={(e) => setCompletar(e.target.checked)} /> Completar com a Receita (CNAEs secundários, sócios, situação)</label>
-            <span className={styles.muted}>{todos.length} arquivo{todos.length === 1 ? "" : "s"} lido{todos.length === 1 ? "" : "s"} · {selecionados.length} marcado{selecionados.length === 1 ? "" : "s"}</span>
+            <span className={styles.muted}>{todos.length} empresa{todos.length === 1 ? "" : "s"} lida{todos.length === 1 ? "" : "s"} · {selecionados.length} marcado{selecionados.length === 1 ? "" : "s"}</span>
           </div>
           {itens.some((i) => i.cnpjExistente && i.situacao === "pronto") && <Notice tom="alerta">Empresas que já têm memorando no sistema ficam desmarcadas. Marque só se quiser cadastrar outro memorando para a mesma empresa.</Notice>}
           <DataTable colunas={colunas} linhas={itens} chaveLinha={(i) => i.chave} />
-          <p className={styles.muted}>Depois de importar, abra cada memorando para completar o que o modelo antigo não tinha: responsáveis dos setores, Puro/Híbrido no Simples, anexos e IE na SEFAZ. O histórico registra "Importou do memorando antigo" com o nome do arquivo.</p>
+          <p className={styles.muted}>Depois de importar, abra cada memorando para completar o que faltou: responsáveis dos setores, Puro/Híbrido no Simples, anexos e IE na SEFAZ. O histórico registra a origem da importação.</p>
         </>}
       </div>
     </Modal>

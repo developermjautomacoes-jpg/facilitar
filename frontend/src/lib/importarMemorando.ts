@@ -16,6 +16,8 @@ export interface MemorandoImportado {
   ano: number | null;
   avisos: string[];
   erro?: string;
+  /** Texto do histórico; sem ele, "Importou do memorando antigo". */
+  origem?: string;
 }
 
 const MESES: Record<string, number> = { janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
@@ -63,7 +65,7 @@ function limpar(v: string): string {
   return v.replace(/^[\s:?\-–[\]]+/, "").replace(/[\s[\]]+$/, "").trim();
 }
 
-function regimeDe(v: string): { regime: string; aviso?: string } {
+export function regimeDe(v: string): { regime: string; aviso?: string } {
   const n = norm(v);
   if (!n.trim()) return { regime: "", aviso: "Opção tributária não informada no memorando." };
   if (/mei|simei/.test(n)) return { regime: "MEI (SIMEI)" };
@@ -85,7 +87,7 @@ function capitalDe(v: string): string {
   return Number.isFinite(centavos) ? centavos.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : v;
 }
 
-function dataIso(v: string): string {
+export function dataIso(v: string): string {
   const m = v.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   return m ? `${m[3]}-${pad(m[2], 2)}-${pad(m[1], 2)}` : "";
 }
@@ -263,7 +265,10 @@ export function completarComReceita(memo: Partial<Memorando>, j: Record<string, 
   const vazio = (k: string) => !String(memo[k] ?? "").trim();
   const por = (k: string, v: unknown, rotulo: string) => { if (v && vazio(k)) { memo[k] = v; feito.push(rotulo); } };
   const brasil = j.razao_social !== undefined || j.cnae_fiscal !== undefined;
+  const capital = (v: unknown) => (Number(v) > 0 ? Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "");
   if (brasil) {
+    por("e_capital", capital(j.capital_social), "capital");
+    por("e_abertura", String(j.data_inicio_atividade || "").slice(0, 10), "abertura");
     por("e_fantasia", j.nome_fantasia, "fantasia");
     por("e_situacao", j.descricao_situacao_cadastral, "situação");
     por("e_natureza", j.natureza_juridica, "natureza jurídica");
@@ -279,6 +284,8 @@ export function completarComReceita(memo: Partial<Memorando>, j: Record<string, 
     const socios = (j.qsa || []).map((x: Record<string, string>) => ({ nome: x.nome_socio || "", cpf: "", qualificacao: x.qualificacao_socio || "", entrada: x.data_entrada_sociedade || "" })).filter((x: { nome: string }) => x.nome);
     if (socios.length && !(memo.socios as unknown[] | undefined)?.length) { memo.socios = socios; feito.push(`${socios.length} sócio(s)`); }
   } else if (j.nome !== undefined) {
+    por("e_capital", capital(j.capital_social), "capital");
+    por("e_abertura", dataIso(String(j.abertura || "")), "abertura");
     por("e_fantasia", j.fantasia, "fantasia");
     por("e_situacao", j.situacao, "situação");
     por("e_natureza", j.natureza_juridica, "natureza jurídica");

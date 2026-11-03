@@ -24,9 +24,9 @@ export async function excluirMemorando(id: string): Promise<void> {
 }
 
 /** Cadastra um memorando importado de arquivo antigo (ação "salvar" do api.php, criando um novo). */
-export async function importarMemorando(memo: Partial<Memorando>, numero: { seq: number; ano: number } | null, anoAuto: number, arquivo: string): Promise<Memorando> {
+export async function importarMemorando(memo: Partial<Memorando>, numero: { seq: number; ano: number } | null, anoAuto: number, acaoCriou: string): Promise<Memorando> {
   const r = await chamarApi<{ memo: Memorando }>("salvar", {
-    corpo: { id: null, numero, anoAuto, usuario: usuarioAtual(), acaoCriou: `Importou do memorando antigo (${arquivo})`, alteracoes: [], memo },
+    corpo: { id: null, numero, anoAuto, usuario: usuarioAtual(), acaoCriou, alteracoes: [], memo },
   });
   return r.memo;
 }

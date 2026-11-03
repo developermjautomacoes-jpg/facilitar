@@ -85,7 +85,7 @@ export function ArquivoPage() {
     <>
       <PageHeader titulo="Arquivo de memorandos" descricao="Pesquise, visualize, edite e acompanhe a situação de cada cliente."
         acoes={<>
-          <Button icone={<Icon nome="arquivo" />} onClick={() => setImportar(true)}>Importar memorandos antigos</Button>
+          <Button icone={<Icon nome="arquivo" />} onClick={() => setImportar(true)}>Importar memorandos</Button>
           <Button variante="primary" icone={<Icon nome="mais" />} onClick={() => navegar("/memorandos/novo")}>Novo memorando</Button>
         </>} />
       <div className={styles.filtros}>
