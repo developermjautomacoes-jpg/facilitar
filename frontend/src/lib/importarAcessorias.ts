@@ -72,7 +72,7 @@ export function memorandosDoCsv(texto: string, arquivo: string): MemorandoImport
     if (r.terceiros) obs.push("Contabilidade de terceiros");
 
     const cadastro = dataIso(v("Cadastro")), desde = dataIso(v("Cli. desde"));
-    if (!desde) avisos.push(`Sem "Cli. desde" no relatório: "Cliente desde" usa a data de cadastro (${v("Cadastro") || "não informada"}).`);
+    if (!desde) avisos.push(`Sem "Cli. desde" no relatório: a data de entrada veio do Cadastro (${v("Cadastro") || "não informada"}). Ajuste se precisar.`);
 
     const cep = digitos(v("CEP"));
     const endereco = [

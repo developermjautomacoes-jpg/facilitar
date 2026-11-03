@@ -589,6 +589,15 @@ if ($acao === 'salvar') {
         // situação do cliente é alterada só pela ação "cliente"
         foreach (['situacaoCliente', 'dataSaida', 'motivoSaida', 'obsSaida'] as $k) $memo[$k] = $atual[$k] ?? '';
     } else {
+        // importação em lote nunca cria segundo memorando para a mesma empresa
+        if (!empty($in['semDuplicar'])) {
+            $cnpjNovo = preg_replace('/\D/', '', (string)($memo['e_cnpj'] ?? ''));
+            foreach (glob($memDir . '/*.json') as $f) {
+                $o = ler($f);
+                if ($o && $cnpjNovo !== '' && preg_replace('/\D/', '', (string)($o['e_cnpj'] ?? '')) === $cnpjNovo && ($o['status'] ?? '') !== 'cancelado')
+                    sai(422, ['erro' => 'Empresa já cadastrada no memorando Nº ' . numTxt((int)($o['seq'] ?? 0), (int)($o['ano'] ?? 0)) . '.']);
+            }
+        }
         if (is_array($num)) { $seq = (int)$num['seq']; $ano = (int)$num['ano']; }
         else {
             $ano = (int)($in['anoAuto'] ?? date('Y'));

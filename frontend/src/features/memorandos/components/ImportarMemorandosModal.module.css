@@ -7,7 +7,11 @@
 .opcoes label { display: inline-flex; gap: var(--space-2); align-items: center; cursor: pointer; }
 .opcoes input { accent-color: var(--color-navy-700); }
 .muted { color: var(--color-text-muted); font-size: var(--text-sm); }
-.riscado { text-decoration: line-through; color: var(--color-text-muted); }
+.campo { display: flex; flex-direction: column; gap: 2px; }
+.entrada { width: 100%; min-width: 0; font: inherit; font-size: var(--text-sm); padding: 4px 6px; border: var(--border-width) solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); }
+.entrada:disabled { background: var(--color-surface-2); color: var(--color-text-muted); }
+.invalido { border-color: var(--color-danger); }
+.erro { font-size: var(--text-xs); color: var(--color-danger); }
 .emp { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .emp b { overflow-wrap: anywhere; }
 .emp span { font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
