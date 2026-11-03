@@ -9,6 +9,7 @@ import { AgendaPage } from "@/features/agenda/AgendaPage";
 import { ArquivoPage } from "@/features/memorandos/ArquivoPage";
 import { MemorandoEditorPage } from "@/features/memorandos/MemorandoEditorPage";
 import { MemorandosProvider } from "@/features/memorandos/MemorandosContext";
+import { NfsePage } from "@/features/nfse/NfsePage";
 import { PainelPage } from "@/features/painel/PainelPage";
 import { PlanejamentoPage } from "@/features/planejamento/PlanejamentoPage";
 import { PerfilPage } from "@/features/perfil/PerfilPage";
@@ -30,6 +31,7 @@ function Rotas() {
           <Route path="memorandos/novo" element={<MemorandoEditorPage />} />
           <Route path="memorandos/:id/:acao" element={<MemorandoEditorPage />} />
           <Route path="colaboradores" element={<ColaboradoresPage />} />
+          <Route path="nfse" element={<NfsePage />} />
           <Route path="planejamento" element={<PlanejamentoPage />} />
           <Route path="precificacao" element={<PrecificacaoPage />} />
           <Route path="perfil" element={<PerfilPage />} />

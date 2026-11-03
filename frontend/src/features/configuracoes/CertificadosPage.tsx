@@ -48,7 +48,7 @@ export function CertificadosPage() {
 
   return (
     <>
-      <PageHeader titulo="Configurações" descricao="Certificados digitais para consultar a inscrição estadual na SEFAZ e conexão com o Google Agenda. Arquivos e chaves ficam só no servidor, cifrados." />
+      <PageHeader titulo="Configurações" descricao="Certificados digitais para consultar a inscrição estadual na SEFAZ e capturar NFS-e, e conexão com o Google Agenda. Arquivos e chaves ficam só no servidor, cifrados." />
       {erro && <Notice tom="erro">{erro}</Notice>}
       <div className={styles.grade}>
         <Card titulo="Certificados digitais" semPadding>
