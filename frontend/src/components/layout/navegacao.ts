@@ -9,6 +9,7 @@ export const MENU: ItemMenu[] = [
   { rota: "/memorandos/novo", rotulo: "Novo memorando", icone: "memorando", descricao: "Memorando de entrada de empresa" },
   { rota: "/memorandos", rotulo: "Arquivo de memorandos", icone: "arquivo", descricao: "Memorandos salvos, situação e histórico" },
   { rota: "/colaboradores", rotulo: "Colaboradores", icone: "colaboradores", descricao: "Equipe e empresas vinculadas" },
+  { rota: "/nfse", rotulo: "Captura de NFS-e", icone: "nfse", descricao: "Notas de serviço das empresas, direto do Ambiente Nacional" },
   { rota: "/planejamento", rotulo: "Planejamento tributário", icone: "planejamento", descricao: "Simples × Presumido × Real com a reforma" },
   { rota: "/precificacao", rotulo: "Precificação", icone: "preco", descricao: "Preço de venda com a reforma tributária" },
   { rota: "/configuracoes", rotulo: "Configurações", icone: "config", descricao: "Certificados digitais e Google Agenda" },

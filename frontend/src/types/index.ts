@@ -5,3 +5,4 @@ export * from "./certificado";
 export * from "./planejamento";
 export * from "./perfil";
 export * from "./agenda";
+export * from "./nfse";

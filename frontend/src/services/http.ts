@@ -2,7 +2,6 @@ import type { Credencial } from "@/types";
 
 /**
  * Cliente HTTP do api.php. Todas as ações exigem o cabeçalho X-Senha.
- * Endpoints e formatos são os já existentes no api.php (nenhum endpoint novo é criado aqui).
  */
 const API_URL = "api.php";
 
@@ -51,6 +50,21 @@ export async function chamarApi<T>(acao: string, opcoes: Opcoes = {}): Promise<T
     throw new ApiError(json?.erro ?? `Erro no servidor (${resposta.status}).`, resposta.status);
   }
   return json as T;
+}
+
+/** Baixa um arquivo do api.php (a autenticação vai no cabeçalho, por isso não dá para usar um link comum). */
+export async function baixarArquivo(acao: string, query: Record<string, string>, nome: string): Promise<void> {
+  if (!credencial) throw new ApiError("Entre com a senha de acesso.", 401);
+  const params = new URLSearchParams({ acao, ...query });
+  const resposta = await fetch(`${API_URL}?${params.toString()}`, { headers: { "X-Senha": credencial.senha }, cache: "no-store" });
+  if (!resposta.ok) {
+    const json = (await resposta.json().catch(() => null)) as { erro?: string } | null;
+    throw new ApiError(json?.erro ?? `Erro no servidor (${resposta.status}).`, resposta.status);
+  }
+  const url = URL.createObjectURL(await resposta.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = nome; a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** Nome de quem está usando o sistema, gravado no histórico pelo api.php. */

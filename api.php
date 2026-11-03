@@ -134,7 +134,7 @@ function decifra($b64) { $r = base64_decode((string)$b64, true); if (!$r || strl
 function infoCert($pemCert) {
     $x = openssl_x509_parse($pemCert);
     $cn = $x['subject']['CN'] ?? '';
-    $doc = ''; if (preg_match('/:(\d{11}|\d{14})\s*$/', $cn, $m)) $doc = $m[1];
+    $doc = ''; if (preg_match('/:(\d{11}|[0-9A-Z]{12}\d{2})\s*$/', $cn, $m)) $doc = $m[1]; // CNPJ numérico ou alfanumérico
     $nome = trim(preg_replace('/:\d+\s*$/', '', $cn));
     return ['titular' => $nome ?: $cn, 'documento' => $doc, 'tipo' => strlen($doc) === 14 ? 'e-CNPJ' : (strlen($doc) === 11 ? 'e-CPF' : 'Certificado A1'),
             'validade' => isset($x['validTo_time_t']) ? date('Y-m-d', $x['validTo_time_t']) : ''];
@@ -783,5 +783,8 @@ if ($acao === 'cliente') {
     if (!grava($f, $m)) sai(500, ['erro' => 'Não foi possível gravar.']);
     sai(200, ['ok' => true]);
 }
+
+// Captura de NFS-e pelo ADN
+if (strpos($acao, 'nfse') === 0) require __DIR__ . '/nfse.php';
 
 sai(400, ['erro' => 'Ação desconhecida.']);

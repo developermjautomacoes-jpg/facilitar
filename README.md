@@ -1,6 +1,6 @@
 # Sistema de gestão — Facilitar Serviços Contábeis
 
-Memorandos de entrada de empresa, painel gerencial da carteira, colaboradores, certificados digitais e planejamento tributário.
+Memorandos de entrada de empresa, painel gerencial da carteira, colaboradores, certificados digitais, captura de NFS-e e planejamento tributário.
 Front-end em **React + Vite + TypeScript + CSS Modules** (`frontend/`), back-end em **PHP** (`api.php`, arquivos JSON no volume `/data`).
 
 Produzido por **NEEKO Automação Inteligente**.
@@ -9,6 +9,7 @@ Produzido por **NEEKO Automação Inteligente**.
 
 ```
 api.php                      back-end (ações via ?acao=..., senha no cabeçalho X-Senha)
+nfse.php                     captura de NFS-e no ADN, incluído pelo api.php nas ações nfse*
 legado/index.html            formulário do memorando (CNPJ/IE, CNAEs, sócios, prévia A4, PDF e Word), aberto pelo front-end em modo embutido
 planejamento/                simulador de planejamento tributário (fora da pasta pública; entregue pelo api.php)
 frontend/
@@ -30,6 +31,7 @@ frontend/
       memorandos/            arquivo, ações de situação e editor (módulo legado embutido)
       colaboradores/         cadastro e empresas vinculadas
       configuracoes/         certificados digitais
+      nfse/                  captura em lote de NFS-e, notas por competência, Excel e XML
       planejamento/          planejamento tributário salvo no servidor
       precificacao/          preço de venda (produto e serviço) com CBS/IBS e transição 2026-2035
       perfil/                perfil do usuário (nome, cargo, contato e foto com zoom e enquadramento)
@@ -54,6 +56,7 @@ Autenticação: senha única da equipe (`SENHA_ACESSO`) enviada no cabeçalho `X
 | `certificadosService` | `certlistar`, `certenviar`, `certpadrao`, `certremover` | Configurações |
 | `planejamentoService` | `planejamento`, `planlistar`, `planler`, `plansalvar`, `planexcluir` | Planejamento tributário |
 | `perfilService` | `perfil`, `perfilsalvar` | Meu perfil, cabeçalho |
+| `nfseService` | `nfseempresas`, `nfseempresasalvar`, `nfseempresaexcluir`, `nfsecapturar`, `nfsenotas`, `nfseverificar`, `nfsereiniciar`, `nfsezip` | Captura de NFS-e |
 | módulo legado (`legado/index.html`) | `salvar`, `cnpj`, `ie`, `colabs`, `certlistar`, `listar` | Novo / editar / visualizar memorando, PDF e Word |
 
 Endpoints novos: `perfil` (GET `?usuario=`) e `perfilsalvar` (POST `{usuario, nomeExibicao, cargo, email, telefone, foto}`), autenticados por `X-Senha`. O perfil fica em `DADOS_DIR/perfis/<usuario>.json`; a foto é recortada no navegador (JPEG 320×320, até ~300 KB) e gravada como data URL. Não há outros endpoints novos.
@@ -62,6 +65,15 @@ Endpoints novos: `perfil` (GET `?usuario=`) e `perfilsalvar` (POST `{usuario, no
 `#/precificacao` (também pelo botão no Planejamento) calcula o preço de venda pelo método do divisor para Simples puro, Simples híbrido, Lucro Presumido e Lucro Real, no ano escolhido (2026 a 2035). A regra é toda no navegador (`features/precificacao/precificacaoCalc.ts`), com as alíquotas da transição em `src/lib/reforma.ts`: CBS de referência 11,3% (TCU, 28/10/2026), cobrada com −0,1 ponto em 2027-2028 (art. 347), IBS 0,1% de teste e proporcional de 2029 a 2032, ICMS/ISS a 90/80/70/60% de 2029 a 2032 e extintos em 2033, PIS/COFINS só em 2026. CBS/IBS por fora, sobre o preço sem ICMS/ISS (LC 214, art. 12, V). A base legal aparece no rodapé da tela.
 
 O formulário do memorando O formulário do memorando continua no módulo legado (aberto em `#/memorandos/novo` e `#/memorandos/<id>/<editar|ver|pdf|docx>`): ele avisa o front-end ao salvar (`postMessage` "memo-salvo") e o arquivo é recarregado.
+
+### Captura de NFS-e
+`#/nfse` baixa as notas pelo ADN (`GET /contribuintes/DFe/{NSU}?cnpjConsulta=...&lote=true`, mTLS com o e-CNPJ). O certificado precisa ter a mesma raiz do CNPJ consultado; o certificado do escritório não serve para clientes.
+- Cada `nfsecapturar` busca um lote (até 50 documentos); a tela repete com pausa. Notas e último NSU são gravados na mesma transação, então a captura retoma do ponto em que parou e não duplica (chave de acesso única).
+- HTTP 404 e 400 trazem o motivo no corpo: quem decide é `StatusProcessamento`. HTTP 429 e 5xx geram pausa por empresa (`Retry-After` ou espera crescente).
+- A situação da nota sai dos eventos (cancelamento, substituição, análise fiscal, ofício). "Verificar cancelamentos" consulta os eventos de cada nota pela chave.
+- A cadeia ICP-Brasil que faltar no .pfx é completada pelo endereço AIA do certificado.
+- Dados em `/data/nfse`: `nfse.sqlite` e os XML por ambiente, CNPJ e competência. Faça backup do volume. Produção e produção restrita ficam separadas.
+- Para testes locais: `NFSE_ADN_URL` troca o endereço do ADN e `NFSE_ADN_CA` indica a CA do servidor de teste. Não use em produção.
 
 ## Desenvolvimento
 
@@ -92,10 +104,10 @@ Os arquivos ficam em `/data/cert` (volume) e as senhas ficam cifradas com uma ch
 Se a SEFAZ responder "Rejeição 257 – solicitante não habilitado", use um e-CNPJ de empresa habilitada como emissora de NF-e no ES.
 
 ## Instalação em hospedagem compartilhada
-1. Rode `npm run build` em `frontend/` e envie para a pasta do site o conteúdo de `frontend/dist/`, mais `api.php`, `.htaccess`, `config.exemplo.php` e as pastas `legado/` e `planejamento/`.
+1. Rode `npm run build` em `frontend/` e envie para a pasta do site o conteúdo de `frontend/dist/`, mais `api.php`, `nfse.php`, `.htaccess`, `config.exemplo.php` e as pastas `legado/` e `planejamento/`.
 2. No servidor, copie `config.exemplo.php` para `config.php` e defina `SENHA_ACESSO`.
 3. Acesse o endereço da pasta e entre com seu nome e a senha.
 
 A pasta `dados/` é criada sozinha no primeiro uso e fica bloqueada para acesso direto. Ela não vai para o GitHub, então faça backup dela pelo painel da Hostinger.
 
-Requisitos: PHP 7.4 ou superior, com cURL (padrão na Hostinger).
+Requisitos: PHP 7.4 ou superior, com cURL, e, para a captura de NFS-e, PDO SQLite e ZipArchive.
