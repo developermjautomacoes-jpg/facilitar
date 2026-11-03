@@ -1,6 +1,9 @@
 /**
- * Converte o texto de um memorando antigo (.docx no modelo "N 01 - MEMORANDO EMPRESA ...")
- * nos campos do memorando do sistema (os mesmos ids do formulário do módulo legado).
+ * Converte o texto de um memorando antigo (.docx) nos campos do memorando do sistema
+ * (os mesmos ids do formulário do módulo legado). Modelos aceitos:
+ * - "N 01 - MEMORANDO EMPRESA ...": abre com "Em 10 de março de 2025", "Aos setores de ..." e rótulos sem número;
+ * - "N 12 - MEMORANDO ...": abre com "Data:29/08/2025", rótulos numerados ("1 - Nome:", "12- Pró-labore?")
+ *   e termina em "CONSIDERAÇÕES GERAIS".
  */
 import type { Memorando } from "@/types";
 import { DEPARTAMENTOS_PADRAO } from "./constantes";
@@ -48,16 +51,16 @@ const ROTULOS: [string, RegExp][] = [
   ["r_codSimples", /^codigo de acesso( do simples( nacional)?)?/],
   ["r_sefaz", /^senha sefaz[^:]*/],
   ["email", /^e-?mail( de)?( contato)?/],
-  ["contato", /^contato/],
+  ["contato", /^contato( empresarial)?/],
   ["r_cpfAdm", /^cpf (adm|do administrador)/],
   ["r_pis", /^pis\b/],
   ["telefone", /^(telefones?|fones?)(\s*\/\s*whatsapp)?|^whatsapp/],
-  ["r_docs", /^os documentos da empresa se encontram digitalizados em/],
+  ["r_docs", /^os documentos da empresa (se encontram|estao) digitalizados (em|na pasta)/],
   ["m_assunto", /^assunto/],
 ];
 
 function limpar(v: string): string {
-  return v.replace(/^[\s:\-–[\]]+/, "").replace(/[\s[\]]+$/, "").trim();
+  return v.replace(/^[\s:?\-–[\]]+/, "").replace(/[\s[\]]+$/, "").trim();
 }
 
 function regimeDe(v: string): { regime: string; aviso?: string } {
@@ -107,6 +110,13 @@ function emissaoDe(v: string): string[] {
   return [...out];
 }
 
+/** "Adriana: 27 99801-0994 e Emerson: 27 99237-0895" → um contato para cada pessoa. */
+function contatosDe(v: string): { nome: string; telefone: string }[] {
+  return [...v.matchAll(/([^:,;\d]+?)\s*:\s*(\(?\d[\d()\s-]{7,}\d)/g)]
+    .map((m) => ({ nome: m[1].replace(/^\s*e\s+/i, "").trim(), telefone: m[2].trim() }))
+    .filter((c) => c.nome);
+}
+
 function setorDe(v: string): string | null {
   const n = norm(v);
   if (/\brh\b|pessoal|\bdp\b/.test(n)) return "Departamento Pessoal (RH)";
@@ -122,11 +132,20 @@ export function memorandoDeLinhas(linhas: string[], arquivo: string): MemorandoI
   const campos: Record<string, string> = {};
   let seq: number | null = null, ano: number | null = null, dataMemo = "", setores = new Set<string>();
   const obs: string[] = [];
-  let lendoObs = false;
+  let lendoObs = false, lendoConsideracoes = false, setoresNaAbertura = false;
 
-  for (const linha of linhas) {
-    if (!linha) continue;
+  for (const bruta of linhas) {
+    if (!bruta) continue;
+    const linha = bruta.replace(/^\d{1,2}\s*[-–.)]\s*(?=\D)/, ""); // numeração do modelo novo
     const n = norm(linha);
+    if (lendoConsideracoes) {
+      if (/^facilitar servicos contabeis/.test(n)) { lendoConsideracoes = false; continue; }
+      const mSetor = n.match(/^setor (de |do |da )?([^:]+):/);
+      if (mSetor) { const s = setorDe(mSetor[2]); if (s) setores.add(s); }
+      obs.push(linha);
+      continue;
+    }
+    if (/^consideracoes gerais/.test(n)) { lendoConsideracoes = true; continue; }
     if (lendoObs) {
       if (/eldes scherrer|^tel\.?:|^\(27\)/.test(n)) { lendoObs = false; continue; }
       obs.push(linha);
@@ -136,9 +155,12 @@ export function memorandoDeLinhas(linhas: string[], arquivo: string): MemorandoI
     if (mNum && seq === null) { seq = Number(mNum[1]); ano = Number(mNum[2]); continue; }
     const mData = n.match(/^em\s+(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})/);
     if (mData && MESES[mData[2]]) { dataMemo = `${mData[3]}-${pad(MESES[mData[2]], 2)}-${pad(mData[1], 2)}`; continue; }
+    const mDataNum = n.match(/^data\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/);
+    if (mDataNum && !dataMemo) { dataMemo = dataIso(mDataNum[1]); continue; }
     const mSet = n.match(/setores de (.*)$/);
     if (mSet && /^aos /.test(n)) {
       linha.slice(n.indexOf(mSet[1])).split(/,|\s+e\s+/).forEach((p) => { const s = setorDe(p); if (s) setores.add(s); });
+      setoresNaAbertura = true;
       continue;
     }
     if (/^obs\b/.test(n)) { lendoObs = true; const resto = limpar(linha.slice(3)); if (resto) obs.push(resto); continue; }
@@ -163,19 +185,32 @@ export function memorandoDeLinhas(linhas: string[], arquivo: string): MemorandoI
   const atividades: Memorando["atividades"] = [];
   if (campos.cnae) {
     const m = campos.cnae.match(/^([\d.\-/\s]{7,14})\s*[-–:]?\s*(.*)$/);
-    const cod = digitos(m ? m[1] : campos.cnae).slice(0, 7);
+    const cod = digitos(m ? m[1] : campos.cnae);
     if (cod.length === 7) atividades.push({ cod, desc: m ? m[2].trim() : "", tipo: "Principal", on: true });
+    else { // código digitado errado: não adivinha; a consulta do CNPJ traz o certo
+      avisos.push(`CNAE "${campos.cnae}" tem ${cod.length} dígitos: não foi importado. Confira na consulta do CNPJ.`);
+      obs.push(`CNAE informado no memorando original: ${campos.cnae}`);
+    }
   }
 
+  // "Abertura: 16/01/2025, Transformação LTDA 28/08/2025": o que vem depois da data não cabe no campo e vai para as observações
+  const aberturaResto = (campos.e_abertura ?? "").replace(/^\s*\d{1,2}\/\d{1,2}\/\d{4}[\s,;.-]*/, "").trim();
+  if (aberturaResto && dataIso(campos.e_abertura)) obs.push(`Abertura: ${campos.e_abertura}`);
+
   const cnpj = digitos(campos.e_cnpj);
-  const contato = { nome: campos.contato ?? "", cargo: "", telefone: campos.telefone ?? "", email: (campos.email ?? "").toLowerCase(), setores: [] as string[] };
+  const email = (campos.email ?? "").toLowerCase();
+  const pessoas = contatosDe(campos.contato ?? "").length ? contatosDe(campos.contato ?? "") : contatosDe(campos.telefone ?? "");
+  const contato = { nome: campos.contato ?? "", cargo: "", telefone: campos.telefone ?? "", email, setores: [] as string[] };
+  const contatos = pessoas.length
+    ? pessoas.map((p, i) => ({ ...p, cargo: "", email: i === 0 ? email : "", setores: [] as string[] }))
+    : contato.nome || contato.telefone || contato.email ? [contato] : [];
 
   const memo: Partial<Memorando> = {
     m_data: dataMemo,
     m_assunto: campos.m_assunto || "ENTRADA DE EMPRESA EM NOSSO ESCRITÓRIO",
     layout: "1",
     e_razao: campos.e_razao ?? "",
-    e_fantasia: campos.e_fantasia ?? "",
+    e_fantasia: simNao(campos.e_fantasia ?? "") === "Não" ? "" : campos.e_fantasia ?? "",
     e_cnpj: cnpj.length === 14 ? formatarCnpj(cnpj) : campos.e_cnpj ?? "",
     e_abertura: dataIso(campos.e_abertura ?? ""),
     e_desde: dataMemo,
@@ -188,7 +223,7 @@ export function memorandoDeLinhas(linhas: string[], arquivo: string): MemorandoI
     t_modalidade: "",
     atividades,
     deps: DEPARTAMENTOS_PADRAO.map((nome) => ({ nome, on: setores.has(nome), resp: "" })),
-    contatos: contato.nome || contato.telefone || contato.email ? [contato] : [],
+    contatos,
     socios: [],
     r_prolabore: campos.r_prolabore ?? "",
     r_folha: campos.r_folha ?? "",
@@ -217,6 +252,7 @@ export function memorandoDeLinhas(linhas: string[], arquivo: string): MemorandoI
   else if (cnpj.length !== 14) erro = "CNPJ não encontrado ou incompleto.";
   if (!dataMemo) avisos.push("Data do memorando não encontrada: \"Cliente desde\" fica em branco.");
   if (!setores.size) avisos.push("Nenhum setor reconhecido na abertura do memorando.");
+  else if (!setoresNaAbertura) avisos.push("O memorando não lista os setores: confira os departamentos depois de importar.");
 
   return { arquivo, memo, seq, ano, avisos, erro };
 }

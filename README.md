@@ -61,6 +61,9 @@ Autenticação: senha única da equipe (`SENHA_ACESSO`) enviada no cabeçalho `X
 
 Endpoints novos: `perfil` (GET `?usuario=`) e `perfilsalvar` (POST `{usuario, nomeExibicao, cargo, email, telefone, foto}`), autenticados por `X-Senha`. O perfil fica em `DADOS_DIR/perfis/<usuario>.json`; a foto é recortada no navegador (JPEG 320×320, até ~300 KB) e gravada como data URL. Não há outros endpoints novos.
 
+### Importação de memorandos antigos
+`lib/importarMemorando.ts` aceita dois modelos de .docx: o que abre com "Em 10 de março de 2025" e "Aos setores de ...", e o de rótulos numerados, que abre com "Data:29/08/2025" e termina em "CONSIDERAÇÕES GERAIS". CNAE com número de dígitos errado não é adivinhado: gera aviso e vai para as observações.
+
 ### Precificação
 `#/precificacao` (também pelo botão no Planejamento) calcula o preço de venda pelo método do divisor para Simples puro, Simples híbrido, Lucro Presumido e Lucro Real, no ano escolhido (2026 a 2035). A regra é toda no navegador (`features/precificacao/precificacaoCalc.ts`), com as alíquotas da transição em `src/lib/reforma.ts`: CBS de referência 11,3% (TCU, 28/10/2026), cobrada com −0,1 ponto em 2027-2028 (art. 347), IBS 0,1% de teste e proporcional de 2029 a 2032, ICMS/ISS a 90/80/70/60% de 2029 a 2032 e extintos em 2033, PIS/COFINS só em 2026. CBS/IBS por fora, sobre o preço sem ICMS/ISS (LC 214, art. 12, V). A base legal aparece no rodapé da tela.
 
