@@ -53,6 +53,7 @@ function nfseDb() {
         CREATE TABLE IF NOT EXISTS eventos (ambiente TEXT, cnpj TEXT, chave TEXT, id TEXT, nsu INTEGER, codigo TEXT, tipo TEXT, data TEXT, arquivo TEXT, PRIMARY KEY (ambiente, cnpj, id));
         CREATE INDEX IF NOT EXISTS eventos_chave ON eventos (ambiente, cnpj, chave);
         CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT);
+        CREATE TABLE IF NOT EXISTS acesso (cnpj TEXT PRIMARY KEY, modo TEXT);
         CREATE TABLE IF NOT EXISTS falhas (ambiente TEXT, cnpj TEXT, nsu INTEGER, chave TEXT, motivo TEXT, em TEXT, PRIMARY KEY (ambiente, cnpj, nsu));');
     nfseMigra($db);
     return $db;
@@ -99,6 +100,33 @@ function nfseCertDe($cnpj, $certId = '') {
     });
     return $validos[0] ?? null;
 }
+function nfseProcurador() {
+    $id = nfseDb()->query("SELECT valor FROM config WHERE chave = 'procurador'")->fetchColumn();
+    if (!$id) return null;
+    foreach (certLista() as $c) if ($c['id'] === $id) return $c;
+    return null;
+}
+function nfseProcuradorDados($c) { return $c ? ['id' => $c['id'], 'nome' => ($c['apelido'] ?? '') ?: ($c['titular'] ?? ''), 'documento' => $c['documento'] ?? '', 'validade' => $c['validade'] ?? ''] : null; }
+function nfseModos() {
+    $m = [];
+    foreach (nfseDb()->query('SELECT cnpj, modo FROM acesso') as $r) $m[$r['cnpj']] = $r['modo'];
+    return $m;
+}
+/** Certificado usado na busca da empresa: o dela (mesma raiz) ou o do procurador, conforme a escolha na tela. */
+function nfseCertEmpresa($cnpj, &$erro, &$modo = null) {
+    $modo = nfseModos()[$cnpj] ?? 'certificado';
+    if ($modo === 'procuracao') {
+        $c = nfseProcurador();
+        if (!$c) $erro = 'Cadastre o certificado do procurador na tela de Captura de NFS-e.';
+        return $c;
+    }
+    $s = nfseDb()->prepare('SELECT cert_id FROM empresas WHERE cnpj = ?'); $s->execute([$cnpj]);
+    $c = nfseCertDe($cnpj, (string) $s->fetchColumn());
+    if (!$c) $erro = 'Nenhum e-CNPJ com a mesma raiz desse CNPJ. Importe o certificado em Configurações ou use a busca por procuração.';
+    return $c;
+}
+function nfseDicaProcuracao($msg, $modo) { return $modo === 'procuracao' ? $msg . ' Confira se a procuração eletrônica desse cliente para a NFS-e está ativa e em nome do procurador cadastrado.' : $msg; }
+
 function nfseHostPublico($host) {
     $ips = gethostbynamel($host);
     if (!$ips) return false;
@@ -327,10 +355,12 @@ function nfseEmpresas($amb, $memDir) {
     $falhas = [];
     $s = nfseDb()->prepare('SELECT cnpj, COUNT(*) n FROM falhas WHERE ambiente = ? GROUP BY cnpj'); $s->execute([$amb]);
     foreach ($s as $r) $falhas[$r['cnpj']] = (int) $r['n'];
-    $saida = [];
+    $saida = []; $modos = nfseModos(); $procurador = nfseProcurador();
     foreach ($lista as $e) {
-        $st = nfseEstado($amb, $e['cnpj']); $cert = nfseCertDe($e['cnpj'], $e['certId']);
-        $saida[] = $e + ['certificado' => $cert ? ['id' => $cert['id'], 'nome' => ($cert['apelido'] ?? '') ?: ($cert['titular'] ?? ''), 'documento' => $cert['documento'] ?? '', 'validade' => $cert['validade'] ?? ''] : null,
+        $st = nfseEstado($amb, $e['cnpj']);
+        $modo = $modos[$e['cnpj']] ?? 'certificado';
+        $cert = $modo === 'procuracao' ? $procurador : nfseCertDe($e['cnpj'], $e['certId']);
+        $saida[] = $e + ['modo' => $modo, 'certificado' => nfseProcuradorDados($cert),
             'ultimoNsu' => (int) $st['ultimo_nsu'], 'ultimaCaptura' => $st['ultima_captura'], 'ultimoErro' => $st['ultimo_erro'], 'notas' => $totais[$e['cnpj']] ?? 0, 'falhas' => $falhas[$e['cnpj']] ?? 0];
     }
     usort($saida, function ($a, $b) { return strcasecmp($a['razao'], $b['razao']); });
@@ -377,6 +407,22 @@ if ($acao === 'nfseempresasalvar') {
     sai(200, ['empresas' => nfseEmpresas($nfseAmb, $memDir)]);
 }
 
+if ($acao === 'nfseacesso') { // escolhe como a empresa é consultada
+    $cnpj = nfseCnpj($in['cnpj'] ?? ''); $modo = (string)($in['modo'] ?? '');
+    if (!in_array($modo, ['certificado', 'procuracao'], true)) sai(400, ['erro' => 'Forma de busca inválida.']);
+    nfseDb()->prepare('INSERT OR REPLACE INTO acesso (cnpj, modo) VALUES (?, ?)')->execute([$cnpj, $modo]);
+    sai(200, ['empresas' => nfseEmpresas($nfseAmb, $memDir)]);
+}
+
+if ($acao === 'nfseprocurador') sai(200, ['procurador' => nfseProcuradorDados(nfseProcurador())]);
+
+if ($acao === 'nfseprocuradorsalvar') { // id vazio tira o procurador; o certificado continua em Configurações
+    $id = (string)($in['id'] ?? '');
+    if ($id !== '' && !array_filter(certLista(), function ($c) use ($id) { return $c['id'] === $id; })) sai(400, ['erro' => 'Certificado não encontrado.']);
+    nfseDb()->prepare("INSERT OR REPLACE INTO config (chave, valor) VALUES ('procurador', ?)")->execute([$id]);
+    sai(200, ['procurador' => nfseProcuradorDados(nfseProcurador()), 'empresas' => nfseEmpresas($nfseAmb, $memDir)]);
+}
+
 if ($acao === 'nfseempresaexcluir') { // tira só o cadastro manual; notas e último NSU continuam guardados
     nfseDb()->prepare('DELETE FROM empresas WHERE cnpj = ?')->execute([nfseCnpj($in['cnpj'] ?? '')]);
     sai(200, ['empresas' => nfseEmpresas($nfseAmb, $memDir)]);
@@ -390,12 +436,10 @@ if ($acao === 'nfsecapturar') {
     $st = nfseEstado($nfseAmb, $cnpj);
     $resta = (int) $st['bloqueado_ate'] - time();
     if ($resta > 0) sai(200, ['status' => 'aguardar', 'segundos' => $resta, 'mensagem' => 'Aguardando o limite de consultas do ADN.']);
-    $cert = null;
-    foreach (nfseDb()->query('SELECT cnpj, cert_id FROM empresas') as $e) if ($e['cnpj'] === $cnpj) $cert = nfseCertDe($cnpj, $e['cert_id']);
-    $cert = $cert ?: nfseCertDe($cnpj);
+    $erro = ''; $modo = 'certificado'; $cert = nfseCertEmpresa($cnpj, $erro, $modo);
     $falha = function ($msg) use ($nfseAmb, $cnpj) { nfseEstadoAtualiza($nfseAmb, $cnpj, ['ultimo_erro' => $msg]); sai(200, ['status' => 'erro', 'mensagem' => $msg]); };
-    if (!$cert) $falha('Nenhum e-CNPJ com a mesma raiz desse CNPJ. Importe o certificado em Configurações.');
-    $erro = ''; $pem = nfsePem($cert['id'], $erro);
+    if (!$cert) $falha($erro);
+    $pem = nfsePem($cert['id'], $erro);
     if (!$pem) $falha($erro);
 
     $nsu = (int) $st['ultimo_nsu'];
@@ -407,9 +451,9 @@ if ($acao === 'nfsecapturar') {
     }
     $j = $r['json'];
     // 404 e 400 trazem o motivo no corpo: só o StatusProcessamento diz se é fim da fila ou rejeição
-    if ($r['errno'] || !is_array($j) || empty($j['StatusProcessamento'])) $falha(nfseMsgConexao($r));
+    if ($r['errno'] || !is_array($j) || empty($j['StatusProcessamento'])) $falha(nfseDicaProcuracao(nfseMsgConexao($r), $modo));
     $status = $j['StatusProcessamento'];
-    if ($status === 'REJEICAO') $falha(nfseMsgErros($j));
+    if ($status === 'REJEICAO') $falha(nfseDicaProcuracao(nfseMsgErros($j), $modo));
     $agora = date('c');
     if ($status === 'NENHUM_DOCUMENTO_LOCALIZADO') {
         nfseEstadoAtualiza($nfseAmb, $cnpj, ['ultima_captura' => $agora, 'ultimo_erro' => null, 'tentativas' => 0]);
@@ -472,13 +516,13 @@ if ($acao === 'nfsenotas') {
 if ($acao === 'nfseverificar') { // consulta os eventos de uma nota pela chave
     $cnpj = nfseCnpj($in['cnpj'] ?? ''); $chave = (string)($in['chave'] ?? '');
     if (!preg_match('/^\d{50}$/', $chave)) sai(400, ['erro' => 'Chave inválida.']);
-    $cert = nfseCertDe($cnpj); if (!$cert) sai(200, ['status' => 'erro', 'mensagem' => 'Nenhum e-CNPJ com a mesma raiz desse CNPJ.']);
-    $erro = ''; $pem = nfsePem($cert['id'], $erro); if (!$pem) sai(200, ['status' => 'erro', 'mensagem' => $erro]);
+    $erro = ''; $modo = 'certificado'; $cert = nfseCertEmpresa($cnpj, $erro, $modo); if (!$cert) sai(200, ['status' => 'erro', 'mensagem' => $erro]);
+    $pem = nfsePem($cert['id'], $erro); if (!$pem) sai(200, ['status' => 'erro', 'mensagem' => $erro]);
     $r = nfseGet($nfseAmb, '/NFSe/' . $chave . '/Eventos', $pem);
     if ($r['http'] === 429 || $r['http'] >= 500) sai(200, ['status' => 'aguardar', 'segundos' => nfseEspera($r, 0), 'mensagem' => 'O ADN pediu uma pausa nas consultas.']);
     $j = $r['json'];
-    if ($r['errno'] || !is_array($j) || empty($j['StatusProcessamento'])) sai(200, ['status' => 'erro', 'mensagem' => nfseMsgConexao($r)]);
-    if ($j['StatusProcessamento'] === 'REJEICAO') sai(200, ['status' => 'erro', 'mensagem' => nfseMsgErros($j)]);
+    if ($r['errno'] || !is_array($j) || empty($j['StatusProcessamento'])) sai(200, ['status' => 'erro', 'mensagem' => nfseDicaProcuracao(nfseMsgConexao($r), $modo)]);
+    if ($j['StatusProcessamento'] === 'REJEICAO') sai(200, ['status' => 'erro', 'mensagem' => nfseDicaProcuracao(nfseMsgErros($j), $modo)]);
     $novos = 0;
     foreach (($j['LoteDFe'] ?? []) as $d) {
         $xml = nfseDescompacta($d['ArquivoXml'] ?? ''); if ($xml === null) continue;
@@ -491,10 +535,10 @@ if ($acao === 'nfseverificar') { // consulta os eventos de uma nota pela chave
 
 if ($acao === 'nfsediagnostico') { // só leitura: mostra a cadeia do certificado e como cada forma de conexão responde
     $cnpj = nfseCnpj($in['cnpj'] ?? '');
-    $cert = nfseCertDe($cnpj);
-    if (!$cert) sai(200, ['linhas' => ['Nenhum e-CNPJ com a mesma raiz desse CNPJ.']]);
-    $linhas = ['Empresa: ' . $cnpj, 'Certificado: ' . ($cert['titular'] ?? '') . ' / ' . ($cert['documento'] ?? '') . ' / validade ' . ($cert['validade'] ?? ''), 'PHP ' . PHP_VERSION . ' / curl ' . (curl_version()['version'] ?? '') . ' / ' . (curl_version()['ssl_version'] ?? '')];
-    $erro = ''; $pem = nfsePem($cert['id'], $erro, true);
+    $erro = ''; $modo = 'certificado'; $cert = nfseCertEmpresa($cnpj, $erro, $modo);
+    if (!$cert) sai(200, ['linhas' => [$erro]]);
+    $linhas = ['Empresa: ' . $cnpj, 'Busca por: ' . ($modo === 'procuracao' ? 'procuração' : 'certificado da empresa'), 'Certificado: ' . ($cert['titular'] ?? '') . ' / ' . ($cert['documento'] ?? '') . ' / validade ' . ($cert['validade'] ?? ''), 'PHP ' . PHP_VERSION . ' / curl ' . (curl_version()['version'] ?? '') . ' / ' . (curl_version()['ssl_version'] ?? '')];
+    $pem = nfsePem($cert['id'], $erro, true);
     if (!$pem) sai(200, ['linhas' => array_merge($linhas, ['Certificado: ' . $erro])]);
     preg_match_all('/-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----/s', (string) file_get_contents($pem), $m);
     $linhas[] = 'Cadeia enviada (' . count($m[0]) . ' certificados' . (strpos($pem, '-parcial') === false ? ', completa até a raiz' : ', INCOMPLETA: não chegou à raiz') . '):';

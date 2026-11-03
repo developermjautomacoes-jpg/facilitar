@@ -2,12 +2,16 @@ export type AmbienteNfse = "producao" | "restrita";
 export type PapelNfse = "prestador" | "tomador" | "intermediario" | "outro";
 export type SituacaoNfse = "normal" | "cancelada" | "substituida" | "em_analise" | "bloqueada";
 
+export type ModoBuscaNfse = "certificado" | "procuracao";
+export interface CertificadoNfse { id: string; nome: string; documento: string; validade: string }
+
 export interface EmpresaNfse {
   cnpj: string;
   razao: string;
   certId: string;
   manual: boolean;
-  certificado: { id: string; nome: string; documento: string; validade: string } | null;
+  modo: ModoBuscaNfse;
+  certificado: CertificadoNfse | null;
   ultimoNsu: number;
   ultimaCaptura: string | null;
   ultimoErro: string | null;

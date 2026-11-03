@@ -56,7 +56,7 @@ Autenticação: senha única da equipe (`SENHA_ACESSO`) enviada no cabeçalho `X
 | `certificadosService` | `certlistar`, `certenviar`, `certpadrao`, `certremover` | Configurações |
 | `planejamentoService` | `planejamento`, `planlistar`, `planler`, `plansalvar`, `planexcluir` | Planejamento tributário |
 | `perfilService` | `perfil`, `perfilsalvar` | Meu perfil, cabeçalho |
-| `nfseService` | `nfseempresas`, `nfseempresasalvar`, `nfseempresaexcluir`, `nfsecapturar`, `nfsenotas`, `nfseverificar`, `nfsediagnostico`, `nfsereiniciar`, `nfsexmls`, `nfsezip` | Captura de NFS-e |
+| `nfseService` | `nfseempresas`, `nfseempresasalvar`, `nfseempresaexcluir`, `nfsecapturar`, `nfsenotas`, `nfseverificar`, `nfseacesso`, `nfseprocurador`, `nfseprocuradorsalvar`, `nfsediagnostico`, `nfsereiniciar`, `nfsexmls`, `nfsezip` | Captura de NFS-e |
 | módulo legado (`legado/index.html`) | `salvar`, `cnpj`, `ie`, `colabs`, `certlistar`, `listar` | Novo / editar / visualizar memorando, PDF e Word |
 
 Endpoints novos: `perfil` (GET `?usuario=`) e `perfilsalvar` (POST `{usuario, nomeExibicao, cargo, email, telefone, foto}`), autenticados por `X-Senha`. O perfil fica em `DADOS_DIR/perfis/<usuario>.json`; a foto é recortada no navegador (JPEG 320×320, até ~300 KB) e gravada como data URL. Não há outros endpoints novos.
@@ -67,7 +67,7 @@ Endpoints novos: `perfil` (GET `?usuario=`) e `perfilsalvar` (POST `{usuario, no
 O formulário do memorando O formulário do memorando continua no módulo legado (aberto em `#/memorandos/novo` e `#/memorandos/<id>/<editar|ver|pdf|docx>`): ele avisa o front-end ao salvar (`postMessage` "memo-salvo") e o arquivo é recarregado.
 
 ### Captura de NFS-e
-`#/nfse` baixa as notas pelo ADN (`GET /contribuintes/DFe/{NSU}?cnpjConsulta=...&lote=true`, mTLS com o e-CNPJ). O certificado precisa ter a mesma raiz do CNPJ consultado; o certificado do escritório não serve para clientes.
+`#/nfse` baixa as notas pelo ADN (`GET /contribuintes/DFe/{NSU}?cnpjConsulta=...&lote=true`, mTLS com o e-CNPJ). Cada empresa é consultada pelo próprio certificado (mesma raiz do CNPJ) ou por procuração: nesse caso a conexão usa o certificado do procurador, cadastrado na própria tela, e o cliente precisa ter dado a procuração eletrônica da NFS-e a ele no Portal de Serviços da Receita Federal.
 - Cada `nfsecapturar` busca um lote (até 50 documentos); a tela repete com pausa. Notas e último NSU são gravados na mesma transação, então a captura retoma do ponto em que parou e não duplica (chave de acesso única).
 - HTTP 404 e 400 trazem o motivo no corpo: quem decide é `StatusProcessamento`. HTTP 429 e 5xx geram pausa por empresa (`Retry-After` ou espera crescente).
 - A situação da nota sai dos eventos (cancelamento, substituição, análise fiscal, ofício). "Verificar cancelamentos" consulta os eventos de cada nota pela chave.

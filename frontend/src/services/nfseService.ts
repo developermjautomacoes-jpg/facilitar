@@ -1,6 +1,6 @@
-import type { AgendaNfse, AmbienteNfse, EmpresaNfse, ListaNotasNfse, PassoCaptura, PassoVerificacao } from "@/types";
+import type { AgendaNfse, AmbienteNfse, CertificadoEnvio, CertificadoNfse, ModoBuscaNfse, EmpresaNfse, ListaNotasNfse, PassoCaptura, PassoVerificacao } from "@/types";
 import type { NotaXml } from "@/features/nfse/nfseDanfse";
-import { baixarArquivo, chamarApi } from "./http";
+import { baixarArquivo, chamarApi, usuarioAtual } from "./http";
 
 type Lista = { empresas: EmpresaNfse[] };
 
@@ -41,4 +41,19 @@ export function lerAgenda(): Promise<AgendaNfse> {
 }
 export function salvarAgenda(ativo: boolean, hora: string): Promise<AgendaNfse> {
   return chamarApi<AgendaNfse>("nfseagendasalvar", { corpo: { ativo, hora } });
+}
+export async function definirModo(ambiente: AmbienteNfse, cnpj: string, modo: ModoBuscaNfse): Promise<EmpresaNfse[]> {
+  return (await chamarApi<Lista>("nfseacesso", { corpo: { cnpj, modo, ambiente } })).empresas ?? [];
+}
+type Procurador = { procurador: CertificadoNfse | null; empresas?: EmpresaNfse[] };
+export async function lerProcurador(): Promise<CertificadoNfse | null> {
+  return (await chamarApi<Procurador>("nfseprocurador")).procurador;
+}
+/** Importa o certificado com os demais e o define como procurador. */
+export async function cadastrarProcurador(ambiente: AmbienteNfse, c: CertificadoEnvio): Promise<Procurador> {
+  const { id } = await chamarApi<{ id: string }>("certenviar", { corpo: { ...c, usuario: usuarioAtual() } });
+  return chamarApi<Procurador>("nfseprocuradorsalvar", { corpo: { id, ambiente } });
+}
+export function retirarProcurador(ambiente: AmbienteNfse): Promise<Procurador> {
+  return chamarApi<Procurador>("nfseprocuradorsalvar", { corpo: { id: "", ambiente } });
 }

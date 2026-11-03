@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AgendaNfse, AmbienteNfse, Certificado, EmpresaNfse, FalhaNfse, NotaNfse, PapelNfse, SituacaoNfse } from "@/types";
+import type { AgendaNfse, AmbienteNfse, CertificadoNfse, ModoBuscaNfse, Certificado, EmpresaNfse, FalhaNfse, NotaNfse, PapelNfse, SituacaoNfse } from "@/types";
 import { Badge, Button, Card, ConfirmDialog, DataTable, Input, KpiCard, Loading, Modal, Notice, PageHeader, Select, useToast } from "@/components/ui";
+import { arquivoParaBase64 } from "@/lib/files";
 import { dataBr, dataHora, formatarCnpj } from "@/lib/format";
-import { baixarXmls, buscarXmls, capturarLote, diagnosticar, excluirEmpresa, lerAgenda, listarEmpresas, listarNotas, reiniciarCaptura, salvarAgenda, salvarEmpresa, verificarEventos } from "@/services/nfseService";
+import { baixarXmls, buscarXmls, cadastrarProcurador, capturarLote, definirModo, diagnosticar, excluirEmpresa, lerAgenda, lerProcurador, listarEmpresas, listarNotas, reiniciarCaptura, retirarProcurador, salvarAgenda, salvarEmpresa, verificarEventos } from "@/services/nfseService";
 import { listarCertificados } from "@/services/certificadosService";
 import { ROTULO_RET_ISS, ROTULO_SITUACAO, exportarExcel, issRetido, valida } from "./nfseExcel";
 import { gerarDanfsePdf, mostrarPdf } from "./nfseDanfse";
@@ -41,6 +42,12 @@ export function NfsePage() {
   const [verificando, setVerificando] = useState("");
   const [nova, setNova] = useState<{ cnpj: string; razao: string; certId: string } | null>(null);
   const [recomecar, setRecomecar] = useState<EmpresaNfse | null>(null);
+  const [procurador, setProcurador] = useState<CertificadoNfse | null>(null);
+  const [procArquivo, setProcArquivo] = useState<File | null>(null);
+  const [procSenha, setProcSenha] = useState("");
+  const [procApelido, setProcApelido] = useState("");
+  const [procChave, setProcChave] = useState(0);
+  const [enviandoProc, setEnviandoProc] = useState(false);
   const [agenda, setAgenda] = useState<AgendaNfse | null>(null);
   const [salvandoAgenda, setSalvandoAgenda] = useState(false);
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
@@ -56,7 +63,7 @@ export function NfsePage() {
     finally { setCarregando(false); }
   }, [ambiente]);
   useEffect(() => { void carregar(); }, [carregar]);
-  useEffect(() => { lerAgenda().then(setAgenda).catch(() => setAgenda(null)); }, []);
+  useEffect(() => { lerAgenda().then(setAgenda).catch(() => setAgenda(null)); lerProcurador().then(setProcurador).catch(() => setProcurador(null)); }, []);
 
   const carregarNotas = useCallback(async (cnpj: string, comp?: string) => {
     if (!cnpj) { setNotas([]); setCompetencias([]); setFalhas([]); setCompetencia(""); return; }
@@ -136,6 +143,26 @@ export function NfsePage() {
     finally { setDiagnosticando(""); }
   }
 
+  async function enviarProcurador() {
+    if (!procArquivo) { avisar("Escolha o arquivo .pfx ou .p12 do procurador.", "erro"); return; }
+    setEnviandoProc(true);
+    try {
+      const r = await cadastrarProcurador(ambiente, { pfx: await arquivoParaBase64(procArquivo), senha: procSenha, apelido: procApelido.trim(), padrao: false });
+      setProcurador(r.procurador); if (r.empresas) setEmpresas(r.empresas);
+      setProcArquivo(null); setProcSenha(""); setProcApelido(""); setProcChave((k) => k + 1);
+      avisar("Certificado do procurador cadastrado.", "sucesso");
+    } catch (x) { avisar(x instanceof Error ? x.message : "Não foi possível cadastrar.", "erro"); }
+    finally { setEnviandoProc(false); }
+  }
+  async function tirarProcurador() {
+    try { const r = await retirarProcurador(ambiente); setProcurador(r.procurador); if (r.empresas) setEmpresas(r.empresas); }
+    catch (x) { avisar(x instanceof Error ? x.message : "Erro.", "erro"); }
+  }
+  async function trocarModo(cnpj: string, modo: ModoBuscaNfse) {
+    try { setEmpresas(await definirModo(ambiente, cnpj, modo)); setMarcadas((m) => { const n = new Set(m); n.delete(cnpj); return n; }); }
+    catch (x) { avisar(x instanceof Error ? x.message : "Erro.", "erro"); }
+  }
+
   async function gravarAgenda() {
     if (!agenda) return;
     setSalvandoAgenda(true);
@@ -194,13 +221,13 @@ export function NfsePage() {
 
   return (
     <>
-      <PageHeader titulo="Captura de NFS-e" descricao="Baixa do Ambiente de Dados Nacional as notas prestadas e tomadas de cada empresa, usando o certificado cadastrado em Configurações."
+      <PageHeader titulo="Captura de NFS-e" descricao="Baixa do Ambiente de Dados Nacional as notas prestadas e tomadas de cada empresa, usando o certificado da empresa ou o do procurador."
         acoes={<Select rotulo="Ambiente" value={ambiente} disabled={ocupado} onChange={(e) => { setAmbiente(e.target.value as AmbienteNfse); setCnpjVista(""); setMarcadas(new Set()); }}>
           <option value="producao">Produção</option><option value="restrita">Produção restrita (testes)</option></Select>} />
       {erro && <Notice tom="erro">{erro}</Notice>}
       {ambiente === "restrita" && <Notice tom="alerta">Produção restrita: as notas deste ambiente não têm validade fiscal e ficam separadas das de produção.</Notice>}
 
-      <Card titulo="Empresas" descricao="Vêm dos memorandos ativos e dos certificados. Cada empresa precisa de um e-CNPJ com a mesma raiz; assim, matriz e filiais usam o mesmo certificado." semPadding>
+      <Card titulo="Empresas" descricao="Vêm dos memorandos ativos e dos certificados. Escolha em cada empresa a busca pelo certificado dela (mesma raiz do CNPJ) ou por procuração." semPadding>
         <div className={styles.barra}>
           <Button tamanho="sm" onClick={() => setMarcadas(new Set(aptas.map((e) => e.cnpj)))} disabled={ocupado || !aptas.length}>Marcar todas aptas</Button>
           <Button tamanho="sm" onClick={() => setMarcadas(new Set())} disabled={ocupado}>Limpar</Button>
@@ -222,7 +249,12 @@ export function NfsePage() {
             colunas={[
               { chave: "sel", titulo: "", largura: "36px", render: (e) => <input type="checkbox" aria-label={`Selecionar ${e.razao}`} checked={marcadas.has(e.cnpj)} disabled={ocupado || !e.certificado || certVencido(e)} onChange={() => marcar(e.cnpj)} /> },
               { chave: "emp", titulo: "Empresa", render: (e) => <><b>{e.razao || "(sem nome)"}</b><br /><small>{formatarCnpj(e.cnpj)}</small></> },
-              { chave: "cert", titulo: "Certificado", render: (e) => !e.certificado ? <Badge tom="alerta">sem certificado</Badge> : certVencido(e) ? <Badge tom="perigo">vencido em {dataBr(e.certificado.validade)}</Badge> : <>{e.certificado.nome}<br /><small>até {dataBr(e.certificado.validade)}</small></> },
+              { chave: "modo", titulo: "Buscar por", render: (e) => (
+                <select className={styles.modo} aria-label={`Forma de busca de ${e.razao}`} value={e.modo} disabled={ocupado} onChange={(x) => void trocarModo(e.cnpj, x.target.value as ModoBuscaNfse)}>
+                  <option value="certificado">Certificado da empresa</option><option value="procuracao">Procuração</option>
+                </select>
+              ) },
+              { chave: "cert", titulo: "Certificado", render: (e) => !e.certificado ? <Badge tom="alerta">{e.modo === "procuracao" ? "cadastre o procurador" : "sem certificado"}</Badge> : certVencido(e) ? <Badge tom="perigo">vencido em {dataBr(e.certificado.validade)}</Badge> : <>{e.certificado.nome}<br /><small>até {dataBr(e.certificado.validade)}</small></> },
               { chave: "cap", titulo: "Última captura", render: (e) => e.ultimoErro ? <span className={styles.erro}>{e.ultimoErro}</span> : e.ultimaCaptura ? <>{dataHora(e.ultimaCaptura)}<br /><small>NSU {e.ultimoNsu}</small></> : "Nunca" },
               { chave: "not", titulo: "Notas", alinhar: "direita", render: (e) => <>{e.notas}{e.falhas > 0 && <><br /><Badge tom="perigo">{e.falhas} com falha</Badge></>}</> },
               { chave: "ac", titulo: "", alinhar: "direita", render: (e) => (
@@ -236,6 +268,20 @@ export function NfsePage() {
             ]} />
         )}
       </Card>
+
+      <div className={styles.notas}>
+        <Card titulo="Certificado do procurador" descricao="Usado nas empresas marcadas com “Procuração”. Cada cliente precisa dar a procuração eletrônica para a NFS-e ao titular deste certificado, no Portal de Serviços da Receita Federal.">
+          {procurador
+            ? <p className={styles.procurador}><b>{procurador.nome}</b> · {procurador.documento} · {procurador.validade < hoje() ? <Badge tom="perigo">vencido em {dataBr(procurador.validade)}</Badge> : `até ${dataBr(procurador.validade)}`} <Button tamanho="sm" disabled={ocupado} onClick={tirarProcurador}>Retirar</Button></p>
+            : <Notice tom="alerta">Nenhum certificado de procurador cadastrado.</Notice>}
+          <div className={styles.procForm}>
+            <Input key={procChave} rotulo={procurador ? "Trocar certificado (.pfx ou .p12)" : "Arquivo do certificado (.pfx ou .p12)"} type="file" accept=".pfx,.p12" onChange={(e) => setProcArquivo(e.target.files?.[0] ?? null)} />
+            <Input rotulo="Senha do certificado" type="password" autoComplete="new-password" value={procSenha} onChange={(e) => setProcSenha(e.target.value)} />
+            <Input rotulo="Apelido (opcional)" placeholder="Ex.: e-CNPJ Facilitar" value={procApelido} onChange={(e) => setProcApelido(e.target.value)} />
+            <Button variante="primary" carregando={enviandoProc} onClick={enviarProcurador}>Cadastrar procurador</Button>
+          </div>
+        </Card>
+      </div>
 
       {agenda && (
         <div className={styles.notas}>
