@@ -1,4 +1,5 @@
 import type { AmbienteNfse, EmpresaNfse, ListaNotasNfse, PassoCaptura, PassoVerificacao } from "@/types";
+import type { NotaXml } from "@/features/nfse/nfseDanfse";
 import { baixarArquivo, chamarApi } from "./http";
 
 type Lista = { empresas: EmpresaNfse[] };
@@ -28,6 +29,10 @@ export function verificarEventos(ambiente: AmbienteNfse, cnpj: string, chave: st
 export async function diagnosticar(ambiente: AmbienteNfse, cnpj: string): Promise<string[]> {
   return (await chamarApi<{ linhas: string[] }>("nfsediagnostico", { corpo: { cnpj, ambiente } })).linhas ?? [];
 }
-export function baixarXmls(ambiente: AmbienteNfse, cnpj: string, competencia: string): Promise<void> {
-  return baixarArquivo("nfsezip", { ambiente, cnpj, competencia }, `NFSe-${cnpj}-${competencia}.zip`);
+export function baixarXmls(ambiente: AmbienteNfse, cnpj: string, competencia: string, chaves?: string[]): Promise<void> {
+  const nome = `NFSe-${cnpj}-${competencia}${chaves ? "-selecionadas" : ""}.zip`;
+  return baixarArquivo("nfsezip", { ambiente, cnpj, competencia }, nome, chaves ? { chaves } : undefined);
+}
+export async function buscarXmls(ambiente: AmbienteNfse, cnpj: string, chaves: string[]): Promise<NotaXml[]> {
+  return (await chamarApi<{ notas: NotaXml[] }>("nfsexmls", { corpo: { cnpj, chaves, ambiente } })).notas ?? [];
 }

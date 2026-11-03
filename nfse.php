@@ -53,7 +53,26 @@ function nfseDb() {
         CREATE TABLE IF NOT EXISTS eventos (ambiente TEXT, cnpj TEXT, chave TEXT, id TEXT, nsu INTEGER, codigo TEXT, tipo TEXT, data TEXT, arquivo TEXT, PRIMARY KEY (ambiente, cnpj, id));
         CREATE INDEX IF NOT EXISTS eventos_chave ON eventos (ambiente, cnpj, chave);
         CREATE TABLE IF NOT EXISTS falhas (ambiente TEXT, cnpj TEXT, nsu INTEGER, chave TEXT, motivo TEXT, em TEXT, PRIMARY KEY (ambiente, cnpj, nsu));');
+    nfseMigra($db);
     return $db;
+}
+
+/** Versão 1: campos do relatório (NBS, IBGE, obra). As notas já guardadas são preenchidas a partir dos XML. */
+function nfseMigra($db) {
+    if ((int) $db->query('PRAGMA user_version')->fetchColumn() >= 1) return;
+    $db->exec('BEGIN IMMEDIATE');
+    try {
+        $tem = array_column($db->query('PRAGMA table_info(notas)')->fetchAll(), 'name');
+        foreach (['c_nbs', 'x_nbs', 'c_loc_incid', 'cno_obra'] as $c) if (!in_array($c, $tem, true)) $db->exec("ALTER TABLE notas ADD COLUMN $c TEXT DEFAULT ''");
+        $up = $db->prepare('UPDATE notas SET c_nbs = ?, x_nbs = ?, c_loc_incid = ?, cno_obra = ? WHERE ambiente = ? AND cnpj = ? AND chave = ?');
+        foreach ($db->query('SELECT ambiente, cnpj, chave, arquivo FROM notas')->fetchAll() as $n) {
+            $xml = @file_get_contents(nfseDir() . '/' . $n['arquivo']);
+            $d = $xml === false ? null : nfseLerNota($xml, $n['cnpj']);
+            if ($d) $up->execute([$d['c_nbs'], $d['x_nbs'], $d['c_loc_incid'], $d['cno_obra'], $n['ambiente'], $n['cnpj'], $n['chave']]);
+        }
+        $db->exec('PRAGMA user_version = 1');
+        $db->exec('COMMIT');
+    } catch (Throwable $e) { $db->exec('ROLLBACK'); throw $e; }
 }
 
 function nfseEstado($amb, $cnpj) {
@@ -217,6 +236,7 @@ function nfseLerNota($xml, $cnpj) {
         'cstat' => $t('cStat'), 'papel' => $papel, 'prest_doc' => $prest, 'prest_nome' => $t("$dps/prest/xNome") ?: ($emiteTomador ? '' : $t('emit/xNome')),
         'toma_doc' => $toma, 'toma_nome' => $t("$dps/toma/xNome") ?: ($emiteTomador ? $t('emit/xNome') : ''), 'interm_doc' => $interm, 'op_simples' => $t("$dps/prest/regTrib/opSimpNac"),
         'trib_nac' => $t("$dps/serv/cServ/cTribNac"), 'trib_mun' => $t("$dps/serv/cServ/cTribMun"), 'desc_nac' => $t('xTribNac'), 'descricao' => $t("$dps/serv/cServ/xDescServ"),
+        'c_nbs' => $t("$dps/serv/cServ/cNBS"), 'x_nbs' => $t('xNBS'), 'c_loc_incid' => $t('cLocIncid'), 'cno_obra' => $t("$dps/serv/obra/cObra"),
         'mun_incid' => $t('xLocIncid'), 'trib_issqn' => $t("$dps/valores/trib/tribMun/tribISSQN"), 'tp_ret_iss' => $t("$dps/valores/trib/tribMun/tpRetISSQN"),
         'aliq' => $t('valores/pAliqAplic') ?: $t("$dps/valores/trib/tribMun/pAliq"), 'tp_ret_pis' => $t("$dps/valores/trib/tribFed/piscofins/tpRetPisCofins"),
         'v_serv' => nfseCentavos($t("$dps/valores/vServPrest/vServ")), 'v_bc' => nfseCentavos($t('valores/vBC')), 'v_iss' => nfseCentavos($t('valores/vISSQN')),
@@ -488,14 +508,36 @@ if ($acao === 'nfsereiniciar') { // volta o NSU a zero; as notas já guardadas n
     sai(200, ['empresas' => nfseEmpresas($nfseAmb, $memDir)]);
 }
 
+function nfseChaves($v) {
+    if ($v === null) return null;
+    if (!is_array($v) || count($v) > 5000) sai(400, ['erro' => 'Seleção inválida.']);
+    foreach ($v as $c) if (!is_string($c) || !preg_match('/^\d{50}$/', $c)) sai(400, ['erro' => 'Chave inválida.']);
+    return $v;
+}
+
+if ($acao === 'nfsexmls') { // XML das notas escolhidas, para montar o DANFSe no navegador
+    $cnpj = nfseCnpj($in['cnpj'] ?? ''); $chaves = nfseChaves($in['chaves'] ?? []);
+    if (count($chaves) > 300) sai(400, ['erro' => 'Escolha até 300 notas por vez.']);
+    $s = nfseDb()->prepare('SELECT chave, situacao, arquivo FROM notas WHERE ambiente = ? AND cnpj = ? AND chave = ?');
+    $saida = [];
+    foreach ($chaves as $c) {
+        $s->execute([$nfseAmb, $cnpj, $c]); $n = $s->fetch(); if (!$n) continue;
+        $xml = @file_get_contents(nfseDir() . '/' . $n['arquivo']);
+        if ($xml !== false) $saida[] = ['chave' => $c, 'situacao' => $n['situacao'], 'xml' => $xml];
+    }
+    sai(200, ['notas' => $saida]);
+}
+
 if ($acao === 'nfsezip') {
     $cnpj = nfseCnpj($_GET['cnpj'] ?? ''); $comp = (string)($_GET['competencia'] ?? '');
     if (!preg_match('/^\d{4}-\d{2}$/', $comp)) sai(400, ['erro' => 'Competência inválida.']);
+    $selecao = nfseChaves($in['chaves'] ?? null);
     if (!class_exists('ZipArchive')) sai(500, ['erro' => 'O servidor não tem a extensão zip do PHP.']);
     $s = nfseDb()->prepare('SELECT chave, papel, arquivo FROM notas WHERE ambiente = ? AND cnpj = ? AND competencia = ?');
     $s->execute([$nfseAmb, $cnpj, $comp]);
     $notas = $s->fetchAll();
-    if (!$notas) sai(404, ['erro' => 'Nenhuma nota nessa competência.']);
+    if ($selecao !== null) $notas = array_values(array_filter($notas, function ($n) use ($selecao) { return in_array($n['chave'], $selecao, true); }));
+    if (!$notas) sai(404, ['erro' => 'Nenhuma nota para baixar.']);
     $tmp = tempnam(sys_get_temp_dir(), 'nfsezip');
     $z = new ZipArchive();
     if ($z->open($tmp, ZipArchive::OVERWRITE) !== true) sai(500, ['erro' => 'Não foi possível montar o arquivo.']);

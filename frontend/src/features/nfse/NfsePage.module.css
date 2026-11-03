@@ -7,7 +7,7 @@
 .notas { margin-top: var(--space-5); }
 .filtros { display: grid; grid-template-columns: 2fr 1fr 1fr 2fr; gap: var(--space-3); margin-bottom: var(--space-4); }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-2); }
-.kpis + .barra { padding-left: 0; padding-right: 0; }
+.kpis + .barra { position: sticky; top: 68px; z-index: 2; padding-left: 0; padding-right: 0; background: var(--color-surface); }
 .form { display: flex; flex-direction: column; gap: var(--space-4); }
 @media (max-width: 960px) { .filtros, .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .filtros, .kpis { grid-template-columns: 1fr; } }

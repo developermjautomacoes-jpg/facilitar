@@ -53,10 +53,15 @@ export async function chamarApi<T>(acao: string, opcoes: Opcoes = {}): Promise<T
 }
 
 /** Baixa um arquivo do api.php (a autenticação vai no cabeçalho, por isso não dá para usar um link comum). */
-export async function baixarArquivo(acao: string, query: Record<string, string>, nome: string): Promise<void> {
+export async function baixarArquivo(acao: string, query: Record<string, string>, nome: string, corpo?: unknown): Promise<void> {
   if (!credencial) throw new ApiError("Entre com a senha de acesso.", 401);
   const params = new URLSearchParams({ acao, ...query });
-  const resposta = await fetch(`${API_URL}?${params.toString()}`, { headers: { "X-Senha": credencial.senha }, cache: "no-store" });
+  const resposta = await fetch(`${API_URL}?${params.toString()}`, {
+    method: corpo !== undefined ? "POST" : "GET",
+    headers: { "Content-Type": "application/json", "X-Senha": credencial.senha },
+    body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
+    cache: "no-store",
+  });
   if (!resposta.ok) {
     const json = (await resposta.json().catch(() => null)) as { erro?: string } | null;
     throw new ApiError(json?.erro ?? `Erro no servidor (${resposta.status}).`, resposta.status);

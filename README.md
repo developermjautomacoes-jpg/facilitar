@@ -56,7 +56,7 @@ Autenticação: senha única da equipe (`SENHA_ACESSO`) enviada no cabeçalho `X
 | `certificadosService` | `certlistar`, `certenviar`, `certpadrao`, `certremover` | Configurações |
 | `planejamentoService` | `planejamento`, `planlistar`, `planler`, `plansalvar`, `planexcluir` | Planejamento tributário |
 | `perfilService` | `perfil`, `perfilsalvar` | Meu perfil, cabeçalho |
-| `nfseService` | `nfseempresas`, `nfseempresasalvar`, `nfseempresaexcluir`, `nfsecapturar`, `nfsenotas`, `nfseverificar`, `nfsereiniciar`, `nfsezip` | Captura de NFS-e |
+| `nfseService` | `nfseempresas`, `nfseempresasalvar`, `nfseempresaexcluir`, `nfsecapturar`, `nfsenotas`, `nfseverificar`, `nfsediagnostico`, `nfsereiniciar`, `nfsexmls`, `nfsezip` | Captura de NFS-e |
 | módulo legado (`legado/index.html`) | `salvar`, `cnpj`, `ie`, `colabs`, `certlistar`, `listar` | Novo / editar / visualizar memorando, PDF e Word |
 
 Endpoints novos: `perfil` (GET `?usuario=`) e `perfilsalvar` (POST `{usuario, nomeExibicao, cargo, email, telefone, foto}`), autenticados por `X-Senha`. O perfil fica em `DADOS_DIR/perfis/<usuario>.json`; a foto é recortada no navegador (JPEG 320×320, até ~300 KB) e gravada como data URL. Não há outros endpoints novos.
@@ -72,6 +72,9 @@ O formulário do memorando O formulário do memorando continua no módulo legado
 - HTTP 404 e 400 trazem o motivo no corpo: quem decide é `StatusProcessamento`. HTTP 429 e 5xx geram pausa por empresa (`Retry-After` ou espera crescente).
 - A situação da nota sai dos eventos (cancelamento, substituição, análise fiscal, ofício). "Verificar cancelamentos" consulta os eventos de cada nota pela chave.
 - A cadeia ICP-Brasil que faltar no .pfx é completada pelo endereço AIA do certificado.
+- O Excel tem uma aba por tipo de nota, com linha de total; canceladas e substituídas ficam em aba própria, fora do resumo.
+- O DANFSe sai em PDF no navegador (`features/nfse/nfseDanfse.ts`), a partir do XML, conforme a NT SE/CGNFS-e 008/2026, porque a API oficial foi suspensa em 03/08/2026.
+- Excel, XML e DANFSe valem para as notas marcadas ou, sem marcação, para toda a competência.
 - Dados em `/data/nfse`: `nfse.sqlite` e os XML por ambiente, CNPJ e competência. Faça backup do volume. Produção e produção restrita ficam separadas.
 - Para testes locais: `NFSE_ADN_URL` troca o endereço do ADN e `NFSE_ADN_CA` indica a CA do servidor de teste. Não use em produção.
 

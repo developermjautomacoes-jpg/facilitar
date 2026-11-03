@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AmbienteNfse, Certificado, EmpresaNfse, FalhaNfse, NotaNfse, PapelNfse, SituacaoNfse } from "@/types";
 import { Badge, Button, Card, ConfirmDialog, DataTable, Input, KpiCard, Loading, Modal, Notice, PageHeader, Select, useToast } from "@/components/ui";
 import { dataBr, dataHora, formatarCnpj } from "@/lib/format";
-import { baixarXmls, capturarLote, diagnosticar, excluirEmpresa, listarEmpresas, listarNotas, reiniciarCaptura, salvarEmpresa, verificarEventos } from "@/services/nfseService";
+import { baixarXmls, buscarXmls, capturarLote, diagnosticar, excluirEmpresa, listarEmpresas, listarNotas, reiniciarCaptura, salvarEmpresa, verificarEventos } from "@/services/nfseService";
 import { listarCertificados } from "@/services/certificadosService";
 import { ROTULO_RET_ISS, ROTULO_SITUACAO, exportarExcel, issRetido, valida } from "./nfseExcel";
+import { gerarDanfsePdf, mostrarPdf } from "./nfseDanfse";
 import styles from "./NfsePage.module.css";
 
 const PAUSA_LOTES_MS = 2500;   // entre lotes: o ADN bloqueia consultas em sequência rápida (HTTP 429)
@@ -40,6 +41,7 @@ export function NfsePage() {
   const [verificando, setVerificando] = useState("");
   const [nova, setNova] = useState<{ cnpj: string; razao: string; certId: string } | null>(null);
   const [recomecar, setRecomecar] = useState<EmpresaNfse | null>(null);
+  const [selecao, setSelecao] = useState<Set<string>>(new Set());
   const [diagnostico, setDiagnostico] = useState<string[] | null>(null);
   const [diagnosticando, setDiagnosticando] = useState("");
 
@@ -57,6 +59,7 @@ export function NfsePage() {
     if (!cnpj) { setNotas([]); setCompetencias([]); setFalhas([]); setCompetencia(""); return; }
     try {
       const r = await listarNotas(ambiente, cnpj, comp);
+      setSelecao(new Set());
       setNotas(r.notas); setCompetencias(r.competencias); setCompetencia(r.competencia); setFalhas(r.falhas);
     } catch (x) { avisar(x instanceof Error ? x.message : "Não foi possível listar as notas.", "erro"); }
   }, [ambiente, avisar]);
@@ -145,10 +148,22 @@ export function NfsePage() {
     const empresa = empresas.find((e) => e.cnpj === cnpjVista);
     setBaixando(tipo);
     try {
-      if (tipo === "xml") await baixarXmls(ambiente, cnpjVista, competencia);
-      else await exportarExcel(empresa?.razao ?? "", formatarCnpj(cnpjVista), competencia, notas);
+      if (tipo === "xml") await baixarXmls(ambiente, cnpjVista, competencia, selecao.size ? [...selecao] : undefined);
+      else await exportarExcel(empresa?.razao ?? "", formatarCnpj(cnpjVista), competencia, selecao.size ? notas.filter((n) => selecao.has(n.chave)) : notas, selecao.size > 0);
     } catch (x) { avisar(x instanceof Error ? x.message : "Não foi possível gerar o arquivo.", "erro"); }
     finally { setBaixando(""); }
+  }
+  async function abrirDanfse(chaves: string[]) {
+    const aba = window.open("", "_blank");
+    setBaixando("danfse");
+    try {
+      const bytes = await gerarDanfsePdf(await buscarXmls(ambiente, cnpjVista, chaves));
+      mostrarPdf(bytes, aba, `DANFSe-${cnpjVista}-${competencia}.pdf`);
+    } catch (x) { aba?.close(); avisar(x instanceof Error ? x.message : "Não foi possível gerar o DANFSe.", "erro"); }
+    finally { setBaixando(""); }
+  }
+  function alternarNota(chave: string) {
+    setSelecao((m) => { const n = new Set(m); if (n.has(chave)) n.delete(chave); else n.add(chave); return n; });
   }
 
   const visiveis = useMemo(() => {
@@ -160,6 +175,11 @@ export function NfsePage() {
   const tomadas = notas.filter((n) => n.papel === "tomador");
   const naoValidas = notas.filter((n) => !valida(n)).length;
   const ocupado = !!progresso || !!verificando;
+  const todasVisiveis = visiveis.length > 0 && visiveis.every((n) => selecao.has(n.chave));
+  function alternarTodas() {
+    setSelecao((m) => { const n = new Set(m); visiveis.forEach((v) => { if (todasVisiveis) n.delete(v.chave); else n.add(v.chave); }); return n; });
+  }
+  const alvo = selecao.size ? `${selecao.size} selecionada(s)` : "todas";
 
   return (
     <>
@@ -230,14 +250,16 @@ export function NfsePage() {
               <KpiCard rotulo="Fora dos totais" valor={naoValidas} detalhe="canceladas e substituídas" />
             </div>
             <div className={styles.barra}>
-              <Button tamanho="sm" variante="primary" carregando={baixando === "excel"} onClick={() => baixar("excel")}>Baixar Excel</Button>
-              <Button tamanho="sm" carregando={baixando === "xml"} onClick={() => baixar("xml")}>Baixar XML (zip)</Button>
+              <Button tamanho="sm" variante="primary" carregando={baixando === "excel"} onClick={() => baixar("excel")}>Baixar Excel ({alvo})</Button>
+              <Button tamanho="sm" carregando={baixando === "xml"} onClick={() => baixar("xml")}>Baixar XML ({alvo})</Button>
+              <Button tamanho="sm" carregando={baixando === "danfse"} onClick={() => abrirDanfse(selecao.size ? [...selecao] : notas.map((n) => n.chave))}>DANFSe em PDF ({alvo})</Button>
               <Button tamanho="sm" disabled={ocupado} onClick={verificar}>{verificando ? `Verificando ${verificando}` : "Verificar cancelamentos"}</Button>
             </div>
           </>}
           {cnpjVista && (
             <DataTable linhas={visiveis} chaveLinha={(n) => n.chave} vazio="Nenhuma nota com esses filtros."
               colunas={[
+                { chave: "sel", titulo: <input type="checkbox" aria-label="Selecionar todas" checked={todasVisiveis} onChange={alternarTodas} />, largura: "36px", render: (n) => <input type="checkbox" aria-label={`Selecionar nota ${n.numero}`} checked={selecao.has(n.chave)} onChange={() => alternarNota(n.chave)} /> },
                 { chave: "n", titulo: "Número", render: (n) => <><b>{n.numero}</b><br /><small>{dataBr(n.emissao)}</small></> },
                 { chave: "t", titulo: "Tipo", render: (n) => ROTULO_PAPEL[n.papel] },
                 { chave: "c", titulo: "Contraparte", render: (n) => { const p = n.papel === "prestador"; return <>{(p ? n.toma_nome : n.prest_nome) || "(sem nome)"}<br /><small>{formatarCnpj(p ? n.toma_doc : n.prest_doc)}</small></>; } },
@@ -246,6 +268,7 @@ export function NfsePage() {
                 { chave: "i", titulo: "ISS", alinhar: "direita", render: (n) => <>{moeda(n.v_iss)}<br /><small>{ROTULO_RET_ISS[n.tp_ret_iss] ?? ""}</small></> },
                 { chave: "r", titulo: "Retenções", alinhar: "direita", render: (n) => moeda(n.v_total_ret) },
                 { chave: "x", titulo: "Situação", render: (n) => <Badge tom={tomSituacao[n.situacao]}>{ROTULO_SITUACAO[n.situacao]}</Badge> },
+                { chave: "d", titulo: "", alinhar: "direita", render: (n) => <Button tamanho="sm" disabled={baixando === "danfse"} onClick={() => abrirDanfse([n.chave])}>DANFSe</Button> },
               ]} />
           )}
         </Card>
