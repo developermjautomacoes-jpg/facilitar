@@ -124,16 +124,22 @@ function nfseCompletaCadeia($certPem, $extras) {
     }
     return $cadeia;
 }
-function nfsePem($certId, &$erro) {
+function nfseCadeiaCompleta($certPem, $cadeia) {
+    $ultimo = $cadeia ? end($cadeia) : $certPem;
+    $x = openssl_x509_parse($ultimo);
+    return $x && ($x['subject'] ?? null) == ($x['issuer'] ?? null);
+}
+function nfsePem($certId, &$erro, $recriar = false) {
     $f = certFonte($certId, $erro); if (!$f) return null;
     [$pfx, $senha] = $f;
     $c = [];
     if (!openssl_pkcs12_read($pfx, $c, $senha)) { $erro = 'Não foi possível abrir o certificado: importe-o de novo em Configurações.'; return null; }
     $x = openssl_x509_parse($c['cert']);
     if (($x['validTo_time_t'] ?? 0) < time()) { $erro = 'Certificado vencido em ' . date('d/m/Y', $x['validTo_time_t'] ?? 0) . '. Importe o novo em Configurações.'; return null; }
-    $arq = sys_get_temp_dir() . '/memo-cert-nfse-' . substr(hash('sha256', $pfx . '|' . $senha), 0, 16) . '.pem'; // removido por limparPems()
-    if (is_file($arq)) return $arq;
+    $nome = sys_get_temp_dir() . '/memo-cert-nfse-' . substr(hash('sha256', $pfx . '|' . $senha), 0, 16); // removido por limparPems()
+    if (!$recriar && is_file("$nome.pem")) return "$nome.pem";
     $cadeia = nfseCompletaCadeia($c['cert'], $c['extracerts'] ?? []);
+    $arq = nfseCadeiaCompleta($c['cert'], $cadeia) ? "$nome.pem" : "$nome-parcial.pem"; // a parcial é remontada a cada uso, até o download das ACs funcionar
     $old = umask(0077);
     $ok = file_put_contents($arq, $c['cert'] . "\n" . implode("\n", $cadeia) . "\n" . $c['pkey'] . "\n");
     umask($old);
@@ -143,29 +149,36 @@ function nfsePem($certId, &$erro) {
 }
 
 // ---------- comunicação com o ADN ----------
-function nfseGet($amb, $caminho, $pem) {
-    $base = rtrim(getenv('NFSE_ADN_URL') ?: NFSE_BASES[$amb], '/');
+function nfseUrl($amb, $caminho) { return rtrim(getenv('NFSE_ADN_URL') ?: NFSE_BASES[$amb], '/') . $caminho; }
+function nfseCurl($url, $pem, $http11, $tls12, $log = null) {
     $cabecalhos = [];
-    $ch = curl_init($base . $caminho);
-    $op = [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_SSLCERT => $pem, CURLOPT_SSLKEY => $pem,
+    $ch = curl_init($url);
+    $op = [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 60, CURLOPT_CONNECTTIMEOUT => 15,
         CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2, CURLOPT_ENCODING => '', CURLOPT_HTTPHEADER => ['Accept: application/json'],
         CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$cabecalhos) { $p = explode(':', $h, 2); if (count($p) === 2) $cabecalhos[strtolower(trim($p[0]))] = trim($p[1]); return strlen($h); }];
+    if ($pem) { $op[CURLOPT_SSLCERT] = $pem; $op[CURLOPT_SSLKEY] = $pem; }
+    if ($http11) $op[CURLOPT_HTTP_VERSION] = CURL_HTTP_VERSION_1_1;
+    if ($tls12) $op[CURLOPT_SSLVERSION] = CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2;
+    if ($log) { $op[CURLOPT_VERBOSE] = true; $op[CURLOPT_STDERR] = $log; }
     if (getenv('NFSE_ADN_CA')) $op[CURLOPT_CAINFO] = getenv('NFSE_ADN_CA'); // só em teste local
     curl_setopt_array($ch, $op);
     $corpo = curl_exec($ch);
-    $errno = curl_errno($ch); $erro = curl_error($ch);
-    if (in_array($errno, [35, 56], true)) { // alguns clientes só conectam ao ADN limitando a TLS 1.2
-        curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
-        $cabecalhos = [];
-        $corpo = curl_exec($ch); $errno = curl_errno($ch); $erro = curl_error($ch);
-    }
-    $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $r = ['http' => (int) curl_getinfo($ch, CURLINFO_HTTP_CODE), 'corpo' => (string) $corpo, 'errno' => curl_errno($ch), 'erro' => curl_error($ch), 'json' => json_decode((string) $corpo, true), 'cabecalhos' => $cabecalhos];
     curl_close($ch);
-    return ['http' => $http, 'corpo' => (string) $corpo, 'errno' => $errno, 'erro' => $erro, 'json' => json_decode((string) $corpo, true), 'cabecalhos' => $cabecalhos];
+    return $r;
+}
+function nfseGet($amb, $caminho, $pem) {
+    $url = nfseUrl($amb, $caminho);
+    $r = nfseCurl($url, $pem, false, false);
+    foreach ([[true, false], [true, true]] as [$http11, $tls12]) { // alguns servidores só aceitam HTTP/1.1 ou TLS 1.2
+        if (!in_array($r['errno'], [35, 56], true)) break;
+        $r = nfseCurl($url, $pem, $http11, $tls12);
+    }
+    return $r;
 }
 function nfseMsgConexao($r) {
-    if (in_array($r['errno'], [35, 56, 58, 59], true) || in_array($r['http'], [401, 403, 495, 496], true))
-        return 'O ADN recusou o certificado. Confira se é um e-CNPJ ICP-Brasil válido, da mesma raiz do CNPJ consultado (' . ($r['erro'] ?: 'HTTP ' . $r['http']) . ').';
+    if (in_array($r['http'], [401, 403, 495, 496], true)) return 'O ADN recusou o certificado (HTTP ' . $r['http'] . '). Confira se é um e-CNPJ ICP-Brasil da mesma raiz do CNPJ consultado.';
+    if (in_array($r['errno'], [35, 56, 58, 59], true)) return 'O ADN encerrou a conexão segura (' . $r['erro'] . '). Use o botão Diagnosticar da empresa para ver onde ela cai.';
     return 'Falha de comunicação com o ADN: ' . ($r['erro'] ?: 'HTTP ' . $r['http']);
 }
 function nfseMsgErros($j) {
@@ -428,6 +441,44 @@ if ($acao === 'nfseverificar') { // consulta os eventos de uma nota pela chave
     nfseDb()->prepare('UPDATE notas SET eventos_em = ? WHERE ambiente = ? AND cnpj = ? AND chave = ?')->execute([date('c'), $nfseAmb, $cnpj, $chave]);
     $s = nfseDb()->prepare('SELECT situacao FROM notas WHERE ambiente = ? AND cnpj = ? AND chave = ?'); $s->execute([$nfseAmb, $cnpj, $chave]);
     sai(200, ['status' => 'ok', 'eventos' => $novos, 'situacao' => $s->fetchColumn() ?: 'normal']);
+}
+
+if ($acao === 'nfsediagnostico') { // só leitura: mostra a cadeia do certificado e como cada forma de conexão responde
+    $cnpj = nfseCnpj($in['cnpj'] ?? '');
+    $cert = nfseCertDe($cnpj);
+    if (!$cert) sai(200, ['linhas' => ['Nenhum e-CNPJ com a mesma raiz desse CNPJ.']]);
+    $linhas = ['Empresa: ' . $cnpj, 'Certificado: ' . ($cert['titular'] ?? '') . ' / ' . ($cert['documento'] ?? '') . ' / validade ' . ($cert['validade'] ?? ''), 'PHP ' . PHP_VERSION . ' / curl ' . (curl_version()['version'] ?? '') . ' / ' . (curl_version()['ssl_version'] ?? '')];
+    $erro = ''; $pem = nfsePem($cert['id'], $erro, true);
+    if (!$pem) sai(200, ['linhas' => array_merge($linhas, ['Certificado: ' . $erro])]);
+    preg_match_all('/-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----/s', (string) file_get_contents($pem), $m);
+    $linhas[] = 'Cadeia enviada (' . count($m[0]) . ' certificados' . (strpos($pem, '-parcial') === false ? ', completa até a raiz' : ', INCOMPLETA: não chegou à raiz') . '):';
+    foreach ($m[0] as $i => $c) {
+        $x = openssl_x509_parse($c);
+        $linhas[] = '  ' . ($i + 1) . '. ' . ($x['subject']['CN'] ?? '?') . ' <- ' . ($x['issuer']['CN'] ?? '?');
+        if ($i === 0) {
+            $linhas[] = '     Uso: ' . ($x['extensions']['extendedKeyUsage'] ?? '(não informado)');
+            $linhas[] = '     AC: ' . preg_replace('/\s+/', ' ', trim((string)($x['extensions']['authorityInfoAccess'] ?? '(não informado)')));
+        }
+    }
+    $url = nfseUrl($nfseAmb, '/DFe/0?cnpjConsulta=' . rawurlencode($cnpj) . '&lote=true');
+    $testes = [['sem certificado', null, false, false], ['certificado, padrão', $pem, false, false], ['certificado, HTTP/1.1', $pem, true, false], ['certificado, HTTP/1.1 e TLS 1.2', $pem, true, true]];
+    $linhas[] = 'Conexão com ' . parse_url($url, PHP_URL_HOST) . ':';
+    $detalhe = null;
+    foreach ($testes as $t) {
+        $log = fopen('php://temp', 'w+');
+        $ini = microtime(true);
+        $r = nfseCurl($url, $t[1], $t[2], $t[3], $log);
+        $st = is_array($r['json']) ? ($r['json']['StatusProcessamento'] ?? '') : '';
+        $linhas[] = '  ' . $t[0] . ': ' . ($r['errno'] ? 'erro ' . $r['errno'] . ' ' . $r['erro'] : 'HTTP ' . $r['http'] . ' ' . $st) . ' (' . round(microtime(true) - $ini, 1) . 's)';
+        if ($t[1] && $r['errno'] && $detalhe === null) { rewind($log); $detalhe = (string) stream_get_contents($log); }
+        fclose($log);
+        usleep(1500000);
+    }
+    if ($detalhe) {
+        $linhas[] = 'Detalhe da primeira falha:';
+        foreach (array_slice(array_filter(explode("\n", $detalhe), function ($l) { return preg_match('/^\*.*(TLS|SSL|ALPN|Connected|certificate|issuer|subject|reset|Recv)/i', $l); }), -24) as $l) $linhas[] = '  ' . trim($l);
+    }
+    sai(200, ['linhas' => $linhas]);
 }
 
 if ($acao === 'nfsereiniciar') { // volta o NSU a zero; as notas já guardadas não duplicam porque a chave de acesso é única

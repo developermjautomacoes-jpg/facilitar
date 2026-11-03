@@ -25,6 +25,9 @@ export function listarNotas(ambiente: AmbienteNfse, cnpj: string, competencia?: 
 export function verificarEventos(ambiente: AmbienteNfse, cnpj: string, chave: string): Promise<PassoVerificacao> {
   return chamarApi<PassoVerificacao>("nfseverificar", { corpo: { cnpj, chave, ambiente } });
 }
+export async function diagnosticar(ambiente: AmbienteNfse, cnpj: string): Promise<string[]> {
+  return (await chamarApi<{ linhas: string[] }>("nfsediagnostico", { corpo: { cnpj, ambiente } })).linhas ?? [];
+}
 export function baixarXmls(ambiente: AmbienteNfse, cnpj: string, competencia: string): Promise<void> {
   return baixarArquivo("nfsezip", { ambiente, cnpj, competencia }, `NFSe-${cnpj}-${competencia}.zip`);
 }

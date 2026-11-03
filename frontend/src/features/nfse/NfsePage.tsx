@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AmbienteNfse, Certificado, EmpresaNfse, FalhaNfse, NotaNfse, PapelNfse, SituacaoNfse } from "@/types";
 import { Badge, Button, Card, ConfirmDialog, DataTable, Input, KpiCard, Loading, Modal, Notice, PageHeader, Select, useToast } from "@/components/ui";
 import { dataBr, dataHora, formatarCnpj } from "@/lib/format";
-import { baixarXmls, capturarLote, excluirEmpresa, listarEmpresas, listarNotas, reiniciarCaptura, salvarEmpresa, verificarEventos } from "@/services/nfseService";
+import { baixarXmls, capturarLote, diagnosticar, excluirEmpresa, listarEmpresas, listarNotas, reiniciarCaptura, salvarEmpresa, verificarEventos } from "@/services/nfseService";
 import { listarCertificados } from "@/services/certificadosService";
 import { ROTULO_RET_ISS, ROTULO_SITUACAO, exportarExcel, issRetido, valida } from "./nfseExcel";
 import styles from "./NfsePage.module.css";
@@ -40,6 +40,8 @@ export function NfsePage() {
   const [verificando, setVerificando] = useState("");
   const [nova, setNova] = useState<{ cnpj: string; razao: string; certId: string } | null>(null);
   const [recomecar, setRecomecar] = useState<EmpresaNfse | null>(null);
+  const [diagnostico, setDiagnostico] = useState<string[] | null>(null);
+  const [diagnosticando, setDiagnosticando] = useState("");
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -121,6 +123,13 @@ export function NfsePage() {
     await carregarNotas(cnpjVista, competencia);
   }
 
+  async function rodarDiagnostico(cnpj: string) {
+    setDiagnosticando(cnpj);
+    try { setDiagnostico(await diagnosticar(ambiente, cnpj)); }
+    catch (x) { avisar(x instanceof Error ? x.message : "Não foi possível diagnosticar.", "erro"); }
+    finally { setDiagnosticando(""); }
+  }
+
   async function salvarNova() {
     if (!nova) return;
     try { setEmpresas(await salvarEmpresa(ambiente, nova)); setNova(null); avisar("Empresa incluída.", "sucesso"); }
@@ -188,6 +197,7 @@ export function NfsePage() {
               { chave: "ac", titulo: "", alinhar: "direita", render: (e) => (
                 <div className={styles.acoes}>
                   <Button tamanho="sm" disabled={!e.notas} onClick={() => setCnpjVista(e.cnpj)}>Ver notas</Button>
+                  <Button tamanho="sm" disabled={ocupado || !e.certificado} carregando={diagnosticando === e.cnpj} onClick={() => rodarDiagnostico(e.cnpj)}>Diagnosticar</Button>
                   <Button tamanho="sm" disabled={ocupado || e.ultimoNsu === 0} onClick={() => setRecomecar(e)}>Recomeçar</Button>
                   {e.manual && <Button tamanho="sm" variante="danger" disabled={ocupado} onClick={() => { void excluirEmpresa(ambiente, e.cnpj).then(setEmpresas); }}>Tirar</Button>}
                 </div>
@@ -251,6 +261,10 @@ export function NfsePage() {
           </Select>
           <Button variante="primary" onClick={salvarNova}>Salvar</Button>
         </div>}
+      </Modal>
+      <Modal aberto={!!diagnostico} titulo="Diagnóstico da conexão" largura="lg" onFechar={() => setDiagnostico(null)}
+        rodape={<Button onClick={() => { void navigator.clipboard.writeText((diagnostico ?? []).join("\n")); avisar("Diagnóstico copiado.", "sucesso"); }}>Copiar</Button>}>
+        <pre className={styles.diagnostico}>{(diagnostico ?? []).join("\n")}</pre>
       </Modal>
       <ConfirmDialog aberto={!!recomecar} titulo="Recomeçar captura" confirmar="Recomeçar" onConfirmar={confirmarRecomeco} onCancelar={() => setRecomecar(null)}>
         <p>A próxima captura de <b>{recomecar?.razao}</b> relê todos os documentos desde o início. As notas guardadas não duplicam, mas a leitura pode demorar.</p>
