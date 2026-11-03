@@ -8,6 +8,7 @@ import { alterarStatus, excluirMemorando, reativarCliente, registrarSaida } from
 import { MemorandoItem, type AcaoMemorando } from "./components/MemorandoItem";
 import { SaidaClienteModal } from "./components/SaidaClienteModal";
 import { ImportarMemorandosModal } from "./components/ImportarMemorandosModal";
+import { AtualizarCnpjModal } from "./components/AtualizarCnpjModal";
 import { useMemorandos } from "./MemorandosContext";
 import styles from "./ArquivoPage.module.css";
 
@@ -25,6 +26,8 @@ export function ArquivoPage() {
   const [saida, setSaida] = useState<Memorando | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [importar, setImportar] = useState(false);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [atualizar, setAtualizar] = useState<Memorando[]>([]);
 
   const anos = useMemo(() => [...new Set(memorandos.map((d) => d.ano))].sort((a, b) => b - a), [memorandos]);
   const lista = useMemo(() => {
@@ -39,6 +42,14 @@ export function ArquivoPage() {
       return q.split(/\s+/).every((w) => t.includes(w)) || (qd.length >= 4 && t.includes(qd));
     });
   }, [memorandos, busca, ano, situacao]);
+
+  const todosDaLista = lista.length > 0 && lista.every((d) => selecionados.has(d._id));
+  function alternar(id: string) {
+    setSelecionados((m) => { const n = new Set(m); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  function alternarLista() {
+    setSelecionados((m) => { const n = new Set(m); lista.forEach((d) => { if (todosDaLista) n.delete(d._id); else n.add(d._id); }); return n; });
+  }
 
   async function executar(fn: () => Promise<void>, ok: string) {
     setSalvando(true);
@@ -99,8 +110,12 @@ export function ArquivoPage() {
         <EmptyState titulo="Nada encontrado">Nenhum memorando para essa pesquisa ou filtro.</EmptyState>
       ) : (
         <>
-          <p className={styles.contagem}>{lista.length} de {memorandos.length} memorandos</p>
-          <div className={styles.lista}>{lista.map((d) => <MemorandoItem key={d._id} memorando={d} onAcao={aoAcionar} />)}</div>
+          <div className={styles.barra}>
+            <label className={styles.todos}><input type="checkbox" checked={todosDaLista} onChange={alternarLista} /> Selecionar todos da lista</label>
+            <p className={styles.contagem}>{lista.length} de {memorandos.length} memorandos</p>
+            <Button tamanho="sm" variante="primary" disabled={!selecionados.size} onClick={() => setAtualizar(memorandos.filter((d) => selecionados.has(d._id)))}>Atualizar selecionados pelo CNPJ ({selecionados.size})</Button>
+          </div>
+          <div className={styles.lista}>{lista.map((d) => <MemorandoItem key={d._id} memorando={d} onAcao={aoAcionar} selecionado={selecionados.has(d._id)} onSelecionar={alternar} />)}</div>
         </>
       )}
       <ConfirmDialog aberto={!!confirmacao} titulo={textos ? `${textos.t} · Nº ${numeroMemorando(confirmacao!.d.seq, confirmacao!.d.ano)}` : ""}
@@ -110,6 +125,7 @@ export function ArquivoPage() {
       </ConfirmDialog>
       <ImportarMemorandosModal aberto={importar} memorandos={memorandos} onFechar={() => setImportar(false)}
         onConcluido={() => { void recarregar(); avisar("Memorandos importados para o arquivo.", "sucesso"); }} />
+      <AtualizarCnpjModal memorandos={atualizar} onFechar={() => setAtualizar([])} onConcluido={() => { setSelecionados(new Set()); void recarregar(); }} />
       <SaidaClienteModal memorando={saida} salvando={salvando} onCancelar={() => setSaida(null)} onConfirmar={registrar} />
     </>
   );

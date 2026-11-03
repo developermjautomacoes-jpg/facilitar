@@ -31,6 +31,11 @@ export async function importarMemorando(memo: Partial<Memorando>, numero: { seq:
   return r.memo;
 }
 
+/** Grava no memorando o que foi atualizado pela Receita; o histórico registra os campos alterados. */
+export async function gravarAtualizacaoReceita(memo: Memorando, alteracoes: string[]): Promise<void> {
+  await chamarApi("salvar", { corpo: { id: memo._id, numero: null, usuario: usuarioAtual(), acaoAlterou: "Atualizou o cadastro pela Receita", alteracoes, memo } });
+}
+
 /** Consulta o CNPJ pelo servidor (BrasilAPI, com ReceitaWS de alternativa); devolve o JSON da fonte. */
 export async function consultarCnpj(cnpj: string): Promise<Record<string, unknown>> {
   return chamarApi<Record<string, unknown>>("cnpj", { query: { cnpj } });

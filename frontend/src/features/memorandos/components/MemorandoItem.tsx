@@ -6,13 +6,18 @@ import styles from "./MemorandoItem.module.css";
 
 export type AcaoMemorando = "ver" | "editar" | "pdf" | "docx" | "excluir" | "cancelar" | "reativar" | "saida" | "voltou";
 
-export function MemorandoItem({ memorando: d, onAcao }: { memorando: Memorando; onAcao: (acao: AcaoMemorando, d: Memorando) => void }) {
+interface Props { memorando: Memorando; onAcao: (acao: AcaoMemorando, d: Memorando) => void; selecionado: boolean; onSelecionar: (id: string) => void }
+
+export function MemorandoItem({ memorando: d, onAcao, selecionado, onSelecionar }: Props) {
   const cancelado = memorandoCancelado(d), inativo = clienteInativo(d);
   const deps = (d.deps ?? []).filter((x) => x.on);
   const h = historicoDe(d), h0 = h[0], hl = h[h.length - 1];
   return (
     <article className={[styles.item, cancelado || inativo ? styles.apagado : ""].join(" ")}>
-      <div className={styles.numero}>{numeroMemorando(d.seq, d.ano)}<small>{dataBr(d.m_data)}</small></div>
+      <div className={styles.numero}>
+        <label className={styles.selecao}><input type="checkbox" aria-label={`Selecionar memorando ${numeroMemorando(d.seq, d.ano)}`} checked={selecionado} onChange={() => onSelecionar(d._id)} />{numeroMemorando(d.seq, d.ano)}</label>
+        <small>{dataBr(d.m_data)}</small>
+      </div>
       <div className={styles.corpo}>
         <h3 className={styles.nome}>{d.e_razao || "—"}{d.e_fantasia && <span className={styles.fantasia}> · {d.e_fantasia}</span>}</h3>
         <div className={styles.meta}>
