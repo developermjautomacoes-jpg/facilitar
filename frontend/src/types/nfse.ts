@@ -43,3 +43,5 @@ export type PassoVerificacao =
   | { status: "ok"; eventos: number; situacao: SituacaoNfse }
   | { status: "aguardar"; segundos: number; mensagem: string }
   | { status: "erro"; mensagem: string };
+
+export interface AgendaNfse { ativo: boolean; hora: string; ultimoDia: string; status: string; inicio: string; fim: string; linhas: string[] }

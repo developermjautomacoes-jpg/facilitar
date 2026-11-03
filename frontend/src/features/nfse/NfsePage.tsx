@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AmbienteNfse, Certificado, EmpresaNfse, FalhaNfse, NotaNfse, PapelNfse, SituacaoNfse } from "@/types";
+import type { AgendaNfse, AmbienteNfse, Certificado, EmpresaNfse, FalhaNfse, NotaNfse, PapelNfse, SituacaoNfse } from "@/types";
 import { Badge, Button, Card, ConfirmDialog, DataTable, Input, KpiCard, Loading, Modal, Notice, PageHeader, Select, useToast } from "@/components/ui";
 import { dataBr, dataHora, formatarCnpj } from "@/lib/format";
-import { baixarXmls, buscarXmls, capturarLote, diagnosticar, excluirEmpresa, listarEmpresas, listarNotas, reiniciarCaptura, salvarEmpresa, verificarEventos } from "@/services/nfseService";
+import { baixarXmls, buscarXmls, capturarLote, diagnosticar, excluirEmpresa, lerAgenda, listarEmpresas, listarNotas, reiniciarCaptura, salvarAgenda, salvarEmpresa, verificarEventos } from "@/services/nfseService";
 import { listarCertificados } from "@/services/certificadosService";
 import { ROTULO_RET_ISS, ROTULO_SITUACAO, exportarExcel, issRetido, valida } from "./nfseExcel";
 import { gerarDanfsePdf, mostrarPdf } from "./nfseDanfse";
@@ -41,6 +41,8 @@ export function NfsePage() {
   const [verificando, setVerificando] = useState("");
   const [nova, setNova] = useState<{ cnpj: string; razao: string; certId: string } | null>(null);
   const [recomecar, setRecomecar] = useState<EmpresaNfse | null>(null);
+  const [agenda, setAgenda] = useState<AgendaNfse | null>(null);
+  const [salvandoAgenda, setSalvandoAgenda] = useState(false);
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
   const [diagnostico, setDiagnostico] = useState<string[] | null>(null);
   const [diagnosticando, setDiagnosticando] = useState("");
@@ -54,6 +56,7 @@ export function NfsePage() {
     finally { setCarregando(false); }
   }, [ambiente]);
   useEffect(() => { void carregar(); }, [carregar]);
+  useEffect(() => { lerAgenda().then(setAgenda).catch(() => setAgenda(null)); }, []);
 
   const carregarNotas = useCallback(async (cnpj: string, comp?: string) => {
     if (!cnpj) { setNotas([]); setCompetencias([]); setFalhas([]); setCompetencia(""); return; }
@@ -131,6 +134,14 @@ export function NfsePage() {
     try { setDiagnostico(await diagnosticar(ambiente, cnpj)); }
     catch (x) { avisar(x instanceof Error ? x.message : "Não foi possível diagnosticar.", "erro"); }
     finally { setDiagnosticando(""); }
+  }
+
+  async function gravarAgenda() {
+    if (!agenda) return;
+    setSalvandoAgenda(true);
+    try { setAgenda(await salvarAgenda(agenda.ativo, agenda.hora)); avisar("Agendamento salvo.", "sucesso"); }
+    catch (x) { avisar(x instanceof Error ? x.message : "Não foi possível salvar.", "erro"); }
+    finally { setSalvandoAgenda(false); }
   }
 
   async function salvarNova() {
@@ -225,6 +236,20 @@ export function NfsePage() {
             ]} />
         )}
       </Card>
+
+      {agenda && (
+        <div className={styles.notas}>
+          <Card titulo="Captura automática" descricao="Roda no servidor, em produção, para todas as empresas com certificado válido, sem precisar deixar o sistema aberto. A busca manual acima continua disponível.">
+            <div className={styles.agenda}>
+              <label className={styles.check}><input type="checkbox" checked={agenda.ativo} onChange={(e) => setAgenda({ ...agenda, ativo: e.target.checked })} /> Capturar todo dia</label>
+              <Input rotulo="Horário" type="time" value={agenda.hora} onChange={(e) => setAgenda({ ...agenda, hora: e.target.value })} />
+              <Button variante="primary" carregando={salvandoAgenda} onClick={gravarAgenda}>Salvar</Button>
+            </div>
+            <p className={styles.agendaInfo}>{agenda.status === "rodando" ? `Em andamento desde ${dataHora(agenda.inicio)}.` : agenda.fim ? `Última execução: ${dataHora(agenda.fim)}.` : "Ainda não executada."}</p>
+            {agenda.linhas.length > 0 && <ul className={styles.relatorioAgenda}>{agenda.linhas.map((l) => <li key={l}>{l}</li>)}</ul>}
+          </Card>
+        </div>
+      )}
 
       <div className={styles.notas}>
         <Card titulo="Notas capturadas" descricao="Totais sem canceladas e substituídas.">

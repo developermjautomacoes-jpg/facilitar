@@ -1,4 +1,4 @@
-import type { AmbienteNfse, EmpresaNfse, ListaNotasNfse, PassoCaptura, PassoVerificacao } from "@/types";
+import type { AgendaNfse, AmbienteNfse, EmpresaNfse, ListaNotasNfse, PassoCaptura, PassoVerificacao } from "@/types";
 import type { NotaXml } from "@/features/nfse/nfseDanfse";
 import { baixarArquivo, chamarApi } from "./http";
 
@@ -35,4 +35,10 @@ export function baixarXmls(ambiente: AmbienteNfse, cnpj: string, competencia: st
 }
 export async function buscarXmls(ambiente: AmbienteNfse, cnpj: string, chaves: string[]): Promise<NotaXml[]> {
   return (await chamarApi<{ notas: NotaXml[] }>("nfsexmls", { corpo: { cnpj, chaves, ambiente } })).notas ?? [];
+}
+export function lerAgenda(): Promise<AgendaNfse> {
+  return chamarApi<AgendaNfse>("nfseagenda");
+}
+export function salvarAgenda(ativo: boolean, hora: string): Promise<AgendaNfse> {
+  return chamarApi<AgendaNfse>("nfseagendasalvar", { corpo: { ativo, hora } });
 }

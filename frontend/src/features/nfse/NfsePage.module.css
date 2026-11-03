@@ -12,3 +12,7 @@
 @media (max-width: 960px) { .filtros, .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .filtros, .kpis { grid-template-columns: 1fr; } }
 .diagnostico { margin: 0; font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; word-break: break-word; }
+.agenda { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-end; }
+.check { display: inline-flex; gap: var(--space-2); align-items: center; font-size: var(--text-sm); font-weight: var(--weight-semibold); min-height: 40px; }
+.agendaInfo { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+.relatorioAgenda { margin: var(--space-2) 0 0; padding-left: var(--space-5); font-size: var(--text-sm); max-height: 180px; overflow-y: auto; }

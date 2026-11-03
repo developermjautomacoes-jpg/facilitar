@@ -52,6 +52,7 @@ function nfseDb() {
         CREATE INDEX IF NOT EXISTS notas_comp ON notas (ambiente, cnpj, competencia);
         CREATE TABLE IF NOT EXISTS eventos (ambiente TEXT, cnpj TEXT, chave TEXT, id TEXT, nsu INTEGER, codigo TEXT, tipo TEXT, data TEXT, arquivo TEXT, PRIMARY KEY (ambiente, cnpj, id));
         CREATE INDEX IF NOT EXISTS eventos_chave ON eventos (ambiente, cnpj, chave);
+        CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT);
         CREATE TABLE IF NOT EXISTS falhas (ambiente TEXT, cnpj TEXT, nsu INTEGER, chave TEXT, motivo TEXT, em TEXT, PRIMARY KEY (ambiente, cnpj, nsu));');
     nfseMigra($db);
     return $db;
@@ -338,6 +339,31 @@ function nfseEmpresas($amb, $memDir) {
 
 // ---------- ações ----------
 $nfseAmb = nfseAmbiente($_GET['ambiente'] ?? $in['ambiente'] ?? 'producao');
+
+function nfseAgenda() {
+    $s = nfseDb()->query("SELECT valor FROM config WHERE chave = 'agenda'")->fetchColumn();
+    $a = $s ? json_decode($s, true) : null;
+    return (is_array($a) ? $a : []) + ['ativo' => true, 'hora' => '02:00', 'ultimoDia' => '', 'status' => '', 'inicio' => '', 'fim' => '', 'linhas' => []];
+}
+function nfseAgendaGrava($a) { nfseDb()->prepare("INSERT OR REPLACE INTO config (chave, valor) VALUES ('agenda', ?)")->execute([json_encode($a, JSON_UNESCAPED_UNICODE)]); return $a; }
+
+if ($acao === 'nfseagenda') sai(200, nfseAgenda());
+
+if ($acao === 'nfseagendasalvar') {
+    $hora = (string)($in['hora'] ?? '');
+    if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $hora)) sai(400, ['erro' => 'Horário inválido.']);
+    $a = nfseAgenda(); $a['ativo'] = !empty($in['ativo']); $a['hora'] = $hora;
+    sai(200, nfseAgendaGrava($a));
+}
+
+if ($acao === 'nfseagendaresultado') { // chamada pelo agendador
+    $a = nfseAgenda(); $st = (string)($in['status'] ?? ''); $dia = (string)($in['dia'] ?? '');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dia)) sai(400, ['erro' => 'Dia inválido.']);
+    $a['ultimoDia'] = $dia; $a['status'] = $st === 'rodando' ? 'rodando' : 'concluido';
+    if ($st === 'rodando') { $a['inicio'] = date('c'); $a['fim'] = ''; $a['linhas'] = []; }
+    else { $a['fim'] = date('c'); $a['linhas'] = array_map(function ($l) { return mb_substr((string) $l, 0, 300); }, array_slice((array)($in['linhas'] ?? []), 0, 500)); }
+    sai(200, nfseAgendaGrava($a));
+}
 
 if ($acao === 'nfseempresas') sai(200, ['empresas' => nfseEmpresas($nfseAmb, $memDir)]);
 

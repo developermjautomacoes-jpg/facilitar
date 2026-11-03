@@ -26,6 +26,9 @@ COPY legado/index.html /var/www/html/memorandos/legado/index.html
 COPY planejamento/planejamento-tributario.html /opt/planejamento/planejamento-tributario.html
 ENV PLANEJ_HTML=/opt/planejamento/planejamento-tributario.html
 
+# Captura noturna de NFS-e: fora da pasta pública; o horário é definido na tela do sistema
+COPY nfse-agendador.php /opt/nfse-agendador.php
+
 # Certificados A1 antigos (.pfx com RC2/3DES) precisam do provedor "legacy" do OpenSSL 3
 RUN if ls /usr/lib/*/ossl-modules/legacy.so >/dev/null 2>&1; then \
       printf 'openssl_conf = openssl_init\n[openssl_init]\nproviders = provider_sect\n[provider_sect]\ndefault = default_sect\nlegacy = legacy_sect\n[default_sect]\nactivate = 1\n[legacy_sect]\nactivate = 1\n' > /etc/ssl/openssl-memorandos.cnf; \
@@ -39,4 +42,4 @@ RUN mkdir -p /data \
  && a2enconf zz-seguranca
 
 EXPOSE 80
-CMD ["sh", "-c", "mkdir -p /data && chown -R www-data:www-data /data && exec apache2-foreground"]
+CMD ["sh", "-c", "mkdir -p /data && chown -R www-data:www-data /data && (while true; do su -s /bin/sh www-data -c 'php /opt/nfse-agendador.php'; sleep 30; done) & exec apache2-foreground"]

@@ -75,6 +75,7 @@ O formulário do memorando O formulário do memorando continua no módulo legado
 - O Excel tem uma aba por tipo de nota, com linha de total; canceladas e substituídas ficam em aba própria, fora do resumo.
 - O DANFSe sai em PDF no navegador (`features/nfse/nfseDanfse.ts`), a partir do XML, conforme a NT SE/CGNFS-e 008/2026, porque a API oficial foi suspensa em 03/08/2026.
 - Excel, XML e DANFSe valem para as notas marcadas ou, sem marcação, para toda a competência.
+- Captura automática: `nfse-agendador.php` roda no contêiner, confere a agenda a cada minuto e usa a mesma ação `nfsecapturar`. Horário padrão 02:00 (Brasília), ajustável na tela. Só em produção, com janela de 6 horas. Precisa do Docker; na hospedagem compartilhada, só a busca manual.
 - Dados em `/data/nfse`: `nfse.sqlite` e os XML por ambiente, CNPJ e competência. Faça backup do volume. Produção e produção restrita ficam separadas.
 - Para testes locais: `NFSE_ADN_URL` troca o endereço do ADN e `NFSE_ADN_CA` indica a CA do servidor de teste. Não use em produção.
 
