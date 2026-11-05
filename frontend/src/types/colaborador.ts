@@ -10,5 +10,3 @@ export interface Colaborador {
   atualizadoEm?: string;
   atualizadoPor?: string;
 }
-
-export type ColaboradorEntrada = Omit<Colaborador, "id" | "criadoEm" | "atualizadoEm" | "atualizadoPor"> & { id?: string };

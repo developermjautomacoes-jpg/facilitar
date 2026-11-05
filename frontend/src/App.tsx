@@ -3,7 +3,6 @@ import { AppLayout } from "@/components/layout";
 import { ToastProvider } from "@/components/ui";
 import { AuthProvider, useAuth } from "@/features/auth/AuthContext";
 import { LoginPage, TrocarSenhaPage } from "@/features/auth/LoginPage";
-import { ColaboradoresPage } from "@/features/colaboradores/ColaboradoresPage";
 import { CertificadosPage } from "@/features/configuracoes/CertificadosPage";
 import { AgendaPage } from "@/features/agenda/AgendaPage";
 import { ArquivoPage } from "@/features/memorandos/ArquivoPage";
@@ -34,7 +33,6 @@ function Rotas() {
           <Route path="memorandos" element={<ArquivoPage />} />
           <Route path="memorandos/novo" element={<MemorandoEditorPage />} />
           <Route path="memorandos/:id/:acao" element={<MemorandoEditorPage />} />
-          <Route path="colaboradores" element={<ColaboradoresPage />} />
           <Route path="nfse" element={<NfsePage />} />
           <Route path="dfe" element={<DfePage />} />
           {rank >= 5 && <Route path="usuarios" element={<UsuariosPage />} />}

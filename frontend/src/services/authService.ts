@@ -41,7 +41,7 @@ export function sair(): void {
 
 type Lista = { usuarios: UsuarioSistema[] };
 export async function listarUsuarios(): Promise<UsuarioSistema[]> { return (await chamarApi<Lista>("authusuarios")).usuarios ?? []; }
-export async function salvarUsuario(u: { id?: number; nome: string; login: string; nivel: NivelAcesso; facilitar: boolean; ativo: boolean; senha?: string }): Promise<UsuarioSistema[]> {
+export async function salvarUsuario(u: { id?: number; nome: string; login: string; nivel: NivelAcesso; facilitar: boolean; ativo: boolean; senha?: string; cargo: string; setores: string[]; email: string; telefone: string }): Promise<UsuarioSistema[]> {
   return (await chamarApi<Lista>("authusuariosalvar", { corpo: u })).usuarios ?? [];
 }
 export async function redefinirSenha(id: number, senha: string): Promise<UsuarioSistema[]> {

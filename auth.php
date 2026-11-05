@@ -33,12 +33,50 @@ function authDb() {
         CREATE TABLE IF NOT EXISTS sessoes (token TEXT PRIMARY KEY, usuario_id INTEGER, expira INTEGER);
         CREATE TABLE IF NOT EXISTS tentativas (login TEXT PRIMARY KEY, n INTEGER, ate INTEGER);
         CREATE TABLE IF NOT EXISTS restritas (raiz TEXT PRIMARY KEY, nome TEXT);");
+    authMigraColabs($db);
     return $db;
+}
+/** Versão 1: o cadastro de colaboradores passa para o usuário. O id antigo fica em colab_id, porque memorandos e agenda apontam para ele; colaboradores.json permanece como cópia. */
+function authMigraColabs($db) {
+    if ((int) $db->query('PRAGMA user_version')->fetchColumn() >= 1) return;
+    $db->exec('BEGIN IMMEDIATE');
+    try {
+        $tem = array_column($db->query('PRAGMA table_info(usuarios)')->fetchAll(), 'name');
+        foreach (['colab_id', 'cargo', 'setores', 'email', 'telefone'] as $c) if (!in_array($c, $tem, true)) $db->exec("ALTER TABLE usuarios ADD COLUMN $c TEXT DEFAULT ''");
+        $f = rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/') . '/colaboradores.json';
+        $colabs = is_file($f) ? json_decode((string) file_get_contents($f), true) : [];
+        $usuarios = $db->query('SELECT id, nome FROM usuarios')->fetchAll(); $usados = [];
+        $up = $db->prepare('UPDATE usuarios SET colab_id = ?, cargo = ?, setores = ?, email = ?, telefone = ? WHERE id = ?');
+        $ins = $db->prepare("INSERT INTO usuarios (nome, nivel, ativo, trocar_senha, criado_em, colab_id, cargo, setores, email, telefone) VALUES (?, 'auxiliar', ?, 1, ?, ?, ?, ?, ?, ?)");
+        foreach (is_array($colabs) ? $colabs : [] as $c) {
+            $nome = mb_strtolower(trim((string)($c['nome'] ?? ''))); if ($nome === '') continue;
+            $exatos = []; $parciais = [];
+            foreach ($usuarios as $u) {
+                if (in_array($u['id'], $usados, true)) continue;
+                $n = mb_strtolower(trim($u['nome']));
+                if ($n === $nome) $exatos[] = $u['id'];
+                elseif (mb_strpos($nome . ' ', $n . ' ') === 0 || mb_strpos($n . ' ', $nome . ' ') === 0) $parciais[] = $u['id'];
+            }
+            $id = $exatos[0] ?? (count($parciais) === 1 ? $parciais[0] : null);
+            $dados = [(string)($c['id'] ?? ''), (string)($c['cargo'] ?? ''), json_encode(array_values((array)($c['setores'] ?? [])), JSON_UNESCAPED_UNICODE), (string)($c['email'] ?? ''), (string)($c['telefone'] ?? '')];
+            if ($id) { $usados[] = $id; $up->execute(array_merge($dados, [$id])); }
+            else $ins->execute(array_merge([trim((string) $c['nome']), ($c['ativo'] ?? true) !== false ? 1 : 0, date('c')], $dados));
+        }
+        foreach ($db->query("SELECT id FROM usuarios WHERE colab_id IS NULL OR colab_id = ''")->fetchAll(PDO::FETCH_COLUMN) as $id) $db->prepare('UPDATE usuarios SET colab_id = ? WHERE id = ?')->execute([bin2hex(random_bytes(6)), $id]);
+        $db->exec('PRAGMA user_version = 1');
+        $db->exec('COMMIT');
+    } catch (Throwable $e) { $db->exec('ROLLBACK'); throw $e; }
+}
+function authSetores($u) { $s = json_decode((string)($u['setores'] ?? ''), true); return is_array($s) ? $s : []; }
+/** Lista usada nos responsáveis de memorandos, painel e agenda, no formato do antigo cadastro de colaboradores. */
+function authColabs() {
+    return array_map(function ($u) { return ['id' => $u['colab_id'], 'nome' => $u['nome'], 'cargo' => $u['cargo'], 'setores' => authSetores($u), 'email' => $u['email'], 'telefone' => $u['telefone'], 'ativo' => (bool) $u['ativo']]; },
+        authDb()->query('SELECT * FROM usuarios ORDER BY nome')->fetchAll());
 }
 function authHash($t) { return hash('sha256', $t); }
 function authSenhaOk($s) { return is_string($s) && strlen($s) >= 8; }
 function authTexto($v, $n) { return mb_substr(trim((string) $v), 0, $n); }
-function authPublico($u) { return ['id' => (int) $u['id'], 'login' => $u['login'], 'nome' => $u['nome'], 'nivel' => $u['nivel'], 'ativo' => (bool) $u['ativo'], 'facilitar' => (bool) $u['facilitar'], 'trocarSenha' => (bool) $u['trocar_senha'], 'ultimoAcesso' => $u['ultimo_acesso']]; }
+function authPublico($u) { return ['id' => (int) $u['id'], 'colabId' => $u['colab_id'], 'login' => (string) $u['login'], 'temLogin' => !empty($u['hash']), 'cargo' => (string) $u['cargo'], 'setores' => authSetores($u), 'email' => (string) $u['email'], 'telefone' => (string) $u['telefone'], 'nome' => $u['nome'], 'nivel' => $u['nivel'], 'ativo' => (bool) $u['ativo'], 'facilitar' => (bool) $u['facilitar'], 'trocarSenha' => (bool) $u['trocar_senha'], 'ultimoAcesso' => $u['ultimo_acesso']]; }
 function authSessao($u) {
     $t = bin2hex(random_bytes(32));
     authDb()->prepare('DELETE FROM sessoes WHERE expira < ?')->execute([time()]);
@@ -80,6 +118,7 @@ if ($acao === 'authprimeiro') { // só funciona enquanto não há usuários, e e
     $nome = authTexto($authIn['nome'] ?? '', 80); $login = authTexto($authIn['login'] ?? '', 80); $s = $authIn['senha'] ?? '';
     if ($nome === '' || $login === '' || !authSenhaOk($s)) sai(400, ['erro' => 'Informe nome, usuário e uma senha com pelo menos 8 caracteres.']);
     authDb()->prepare("INSERT INTO usuarios (login, nome, nivel, hash, facilitar, trocar_senha, criado_em) VALUES (?, ?, 'socia', ?, 1, 0, ?)")->execute([$login, $nome, password_hash($s, PASSWORD_DEFAULT), date('c')]);
+    authDb()->prepare("UPDATE usuarios SET colab_id = ? WHERE colab_id IS NULL OR colab_id = ''")->execute([bin2hex(random_bytes(6))]);
     sai(200, authSessao(authUsuario(authDb()->lastInsertId())));
 }
 
@@ -138,21 +177,32 @@ function authListar() {
 if ($acao === 'authusuarios') sai(200, ['usuarios' => authListar()]);
 if ($acao === 'authusuariosalvar') {
     $id = (int)($authIn['id'] ?? 0); $nome = authTexto($authIn['nome'] ?? '', 80); $login = authTexto($authIn['login'] ?? '', 80); $nivel = (string)($authIn['nivel'] ?? '');
-    if ($nome === '' || $login === '' || !isset(AUTH_NIVEIS[$nivel])) sai(400, ['erro' => 'Informe nome, usuário e nível.']);
+    if ($nome === '' || !isset(AUTH_NIVEIS[$nivel])) sai(400, ['erro' => 'Informe nome e nível.']);
     $flag = !empty($authIn['facilitar']); $ativo = !isset($authIn['ativo']) || !empty($authIn['ativo']);
     $atual = $id ? authUsuario($id) : null;
     if ($id && !$atual) sai(404, ['erro' => 'Usuário não encontrado.']);
     if ($atual && $atual['facilitar'] && !authVeTudo()) sai(403, ['erro' => 'Sem permissão para este usuário.']);
     if ($flag && !authVeTudo()) sai(403, ['erro' => 'Só quem acessa a empresa restrita pode conceder esse acesso.']);
     if ($id === $AUTH['id'] && ($nivel !== $atual['nivel'] || !$ativo || $flag !== (bool) $atual['facilitar'])) sai(400, ['erro' => 'Peça a outra pessoa para alterar seu próprio nível ou acesso.']);
+    if ($atual && !empty($atual['hash']) && $login === '') sai(400, ['erro' => 'Para tirar o acesso, marque a pessoa como inativa.']);
+    $setores = [];
+    foreach ((array)($authIn['setores'] ?? []) as $x) if (is_string($x) && count($setores) < 20) $setores[] = mb_substr($x, 0, 60);
+    $extras = [authTexto($authIn['cargo'] ?? '', 80), json_encode($setores, JSON_UNESCAPED_UNICODE), authTexto($authIn['email'] ?? '', 120), authTexto($authIn['telefone'] ?? '', 40)];
+    $novaHash = null;
+    if ($login !== '' && empty($atual['hash'])) { // pessoa ganhando acesso agora
+        $temp = (string)($authIn['senha'] ?? '');
+        if (!authSenhaOk($temp)) sai(400, ['erro' => 'A senha provisória precisa ter pelo menos 8 caracteres.']);
+        $novaHash = password_hash($temp, PASSWORD_DEFAULT);
+    }
+    $loginDb = $login === '' ? null : $login;
     try {
         if ($id) {
-            authDb()->prepare('UPDATE usuarios SET login = ?, nome = ?, nivel = ?, facilitar = ?, ativo = ? WHERE id = ?')->execute([$login, $nome, $nivel, $flag ? 1 : 0, $ativo ? 1 : 0, $id]);
+            authDb()->prepare('UPDATE usuarios SET login = ?, nome = ?, nivel = ?, facilitar = ?, ativo = ?, cargo = ?, setores = ?, email = ?, telefone = ? WHERE id = ?')->execute(array_merge([$loginDb, $nome, $nivel, $flag ? 1 : 0, $ativo ? 1 : 0], $extras, [$id]));
+            if ($novaHash) authDb()->prepare('UPDATE usuarios SET hash = ?, trocar_senha = 1 WHERE id = ?')->execute([$novaHash, $id]);
             if ($id !== $AUTH['id']) authDerruba($id);
         } else {
-            $temp = (string)($authIn['senha'] ?? '');
-            if (!authSenhaOk($temp)) sai(400, ['erro' => 'A senha inicial precisa ter pelo menos 8 caracteres.']);
-            authDb()->prepare('INSERT INTO usuarios (login, nome, nivel, hash, facilitar, trocar_senha, criado_em) VALUES (?, ?, ?, ?, ?, 1, ?)')->execute([$login, $nome, $nivel, password_hash($temp, PASSWORD_DEFAULT), $flag ? 1 : 0, date('c')]);
+            authDb()->prepare('INSERT INTO usuarios (login, nome, nivel, hash, facilitar, ativo, trocar_senha, criado_em, cargo, setores, email, telefone, colab_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)')
+                ->execute(array_merge([$loginDb, $nome, $nivel, $novaHash, $flag ? 1 : 0, $ativo ? 1 : 0, date('c')], $extras, [bin2hex(random_bytes(6))]));
         }
     } catch (PDOException $e) { sai(400, ['erro' => 'Já existe um usuário com esse login.']); }
     sai(200, ['usuarios' => authListar()]);
@@ -161,6 +211,7 @@ if ($acao === 'authusuariosenha') { // senha provisória: a pessoa troca no pró
     $id = (int)($authIn['id'] ?? 0); $u = authUsuario($id); $temp = $authIn['senha'] ?? '';
     if (!$u) sai(404, ['erro' => 'Usuário não encontrado.']);
     if ($u['facilitar'] && !authVeTudo()) sai(403, ['erro' => 'Sem permissão para este usuário.']);
+    if (empty($u['hash'])) sai(400, ['erro' => 'Esta pessoa ainda não tem login.']);
     if (!authSenhaOk($temp)) sai(400, ['erro' => 'A senha precisa ter pelo menos 8 caracteres.']);
     authDb()->prepare('UPDATE usuarios SET hash = ?, trocar_senha = 1 WHERE id = ?')->execute([password_hash($temp, PASSWORD_DEFAULT), $id]);
     authDerruba($id);

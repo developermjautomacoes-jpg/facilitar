@@ -9,5 +9,5 @@ export interface Credencial {
   trocarSenha?: boolean;
 }
 
-export interface UsuarioSistema { id: number; login: string; nome: string; nivel: NivelAcesso; ativo: boolean; facilitar: boolean; trocarSenha: boolean; ultimoAcesso: string | null }
+export interface UsuarioSistema { id: number; colabId: string; login: string; temLogin: boolean; cargo: string; setores: string[]; email: string; telefone: string; nome: string; nivel: NivelAcesso; ativo: boolean; facilitar: boolean; trocarSenha: boolean; ultimoAcesso: string | null }
 export interface EmpresaRestrita { raiz: string; nome: string }
