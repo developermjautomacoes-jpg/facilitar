@@ -60,7 +60,7 @@ function executar($dia, $limite) {
 function executarDfe($limite) {
     $hoje = date('Y-m-d'); $linhas = [];
     foreach (api('dfeempresas')['empresas'] ?? [] as $e) {
-        if (empty($e['certificado']) || ($e['certificado']['validade'] ?? '') < $hoje) continue;
+        if (empty($e['capturaAuto']) || empty($e['certificado']) || ($e['certificado']['validade'] ?? '') < $hoje) continue;
         $tot = ['notas' => 0, 'eventos' => 0, 'falhas' => 0]; $texto = '';
         foreach (['nfe', 'cte'] as $servico) {
             while (time() < $limite) {

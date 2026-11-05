@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AmbienteNfse, DocumentoDfe, EmpresaDfe, FalhaDfe, ServicoDfe, SituacaoDfe } from "@/types";
+import type { AmbienteNfse, DocumentoDfe, EmissaoPropria, EmpresaDfe, FalhaDfe, ServicoDfe, SituacaoDfe } from "@/types";
 import { Badge, Button, Card, ConfirmDialog, DataTable, Input, KpiCard, Loading, Notice, PageHeader, Select, useToast } from "@/components/ui";
 import { dataBr, dataHora, formatarCnpj } from "@/lib/format";
-import { baixarXmlsDfe, capturarDfe, definirCiencia, enviarCiencias, listarDocumentos, listarEmpresasDfe, marcarCiencia, reiniciarDfe } from "@/services/dfeService";
+import { baixarXmlsDfe, capturarDfe, definirCapturaAuto, definirCiencia, enviarCiencias, excluirEmissao, importarEmissao, listarDocumentos, listarEmissao, listarEmpresasDfe, marcarCiencia, reiniciarDfe } from "@/services/dfeService";
 import { ROTULO_PAPEL, ROTULO_SITUACAO, exportarExcelDfe, valido } from "./dfeExcel";
 import styles from "@/features/nfse/NfsePage.module.css";
 
@@ -13,6 +13,7 @@ const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const moeda = (c: number) => (c / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const hoje = () => new Date().toISOString().slice(0, 10);
 const hora = (t: number) => new Date(t * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const ROTULO_MODELO: Record<string, string> = { "55": "NF-e", "65": "NFC-e", "57": "CT-e", "67": "CT-e OS" };
 const tomSituacao: Record<SituacaoDfe, "sucesso" | "perigo" | "alerta"> = { normal: "sucesso", cancelada: "perigo", denegada: "alerta" };
 
 interface Progresso { empresa: string; indice: number; total: number; texto: string }
@@ -39,6 +40,31 @@ export function DfePage() {
   const [ligarCiencia, setLigarCiencia] = useState<EmpresaDfe | null>(null);
   const [cienciaSelecao, setCienciaSelecao] = useState(false);
   const [recomecar, setRecomecar] = useState<EmpresaDfe | null>(null);
+
+  const [emissoes, setEmissoes] = useState<EmissaoPropria[]>([]);
+  const [cnpjEmissao, setCnpjEmissao] = useState("");
+  const [arquivosEmissao, setArquivosEmissao] = useState<File[]>([]);
+  const [chaveArquivo, setChaveArquivo] = useState(0);
+  const [importando, setImportando] = useState(false);
+  useEffect(() => { listarEmissao().then(setEmissoes).catch(() => setEmissoes([])); }, []);
+
+  async function importarXmls() {
+    if (!cnpjEmissao || !arquivosEmissao.length) { avisar("Escolha a empresa e o XML.", "erro"); return; }
+    setImportando(true);
+    let ok = 0;
+    try {
+      for (const f of arquivosEmissao) {
+        try { await importarEmissao(cnpjEmissao, f.name, await f.text()); ok++; }
+        catch (x) { avisar(x instanceof Error ? x.message : `${f.name}: não foi possível importar.`, "erro"); }
+      }
+      setEmissoes(await listarEmissao()); setArquivosEmissao([]); setChaveArquivo((k) => k + 1);
+      if (ok) avisar(`${ok} XML importado(s).`, "sucesso");
+    } finally { setImportando(false); }
+  }
+  async function tirarEmissao(e: EmissaoPropria) {
+    try { await excluirEmissao(e); setEmissoes(await listarEmissao()); }
+    catch (x) { avisar(x instanceof Error ? x.message : "Erro.", "erro"); }
+  }
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -175,7 +201,7 @@ export function DfePage() {
       {ambiente === "restrita" && <Notice tom="alerta">Homologação: os documentos deste ambiente não têm validade fiscal e ficam separados dos de produção.</Notice>}
       <Notice tom="alerta">Etapa 1: documentos recebidos. NF-e e CT-e emitidos pela empresa e NFC-e não saem do Ambiente Nacional e virão pela SEFAZ-ES. Só ficam disponíveis os últimos 90 dias, e o sistema guarda a partir de 2 meses antes da primeira captura.</Notice>
 
-      <Card titulo="Empresas" descricao="Vêm da Captura de NFS-e. Aqui vale só o certificado da empresa, de mesma raiz do CNPJ; a procuração da NFS-e não serve. Sem novidade, a SEFAZ só aceita nova consulta após 1 hora." semPadding>
+      <Card titulo="Empresas" descricao="Vêm da Captura de NFS-e. Aqui vale só o certificado da empresa, de mesma raiz do CNPJ; a procuração da NFS-e não serve. Sem novidade, a SEFAZ só aceita nova consulta após 1 hora. Ligue a captura noturna só onde nenhum outro sistema captura o mesmo CNPJ." semPadding>
         <div className={styles.barra}>
           <Button tamanho="sm" onClick={() => setMarcadas(new Set(aptas.map((e) => e.cnpj)))} disabled={ocupado || !aptas.length}>Marcar todas aptas</Button>
           <Button tamanho="sm" onClick={() => setMarcadas(new Set())} disabled={ocupado}>Limpar</Button>
@@ -191,6 +217,7 @@ export function DfePage() {
               { chave: "sel", titulo: "", largura: "36px", render: (e) => <input type="checkbox" aria-label={`Selecionar ${e.razao}`} checked={marcadas.has(e.cnpj)} disabled={ocupado || !e.certificado || certVencido(e)} onChange={() => setMarcadas((m) => { const n = new Set(m); if (n.has(e.cnpj)) n.delete(e.cnpj); else n.add(e.cnpj); return n; })} /> },
               { chave: "emp", titulo: "Empresa", render: (e) => <><b>{e.razao || "(sem nome)"}</b><br /><small>{formatarCnpj(e.cnpj)}</small></> },
               { chave: "cert", titulo: "Certificado", render: (e) => !e.certificado ? <Badge tom="alerta">sem certificado</Badge> : certVencido(e) ? <Badge tom="perigo">vencido em {dataBr(e.certificado.validade)}</Badge> : <small>até {dataBr(e.certificado.validade)}</small> },
+              { chave: "aut", titulo: "Captura noturna", render: (e) => <label className={styles.check}><input type="checkbox" checked={e.capturaAuto} disabled={ocupado} onChange={() => { definirCapturaAuto(ambiente, e.cnpj, !e.capturaAuto).then(setEmpresas).catch((x) => avisar(x instanceof Error ? x.message : "Erro.", "erro")); }} /> {e.capturaAuto ? "Ligada" : "Desligada"}</label> },
               { chave: "cie", titulo: "Ciência automática", render: (e) => <label className={styles.check}><input type="checkbox" checked={e.cienciaAuto} disabled={ocupado} onChange={() => void alternarCiencia(e)} /> {e.cienciaAuto ? "Ligada" : "Desligada"}</label> },
               { chave: "cap", titulo: "Última captura", render: (e) => <>{estadoLinha(e).map(({ s, st }) => <div key={s.id}>{st.ultimoErro ? <span className={styles.erro}>{s.nome}: {st.ultimoErro}</span> : <small>{s.nome}: {st.ultimaCaptura ? dataHora(st.ultimaCaptura) : "nunca"}{st.proximaEm * 1000 > Date.now() ? ` · libera ${hora(st.proximaEm)}` : ""}</small>}</div>)}</> },
               { chave: "doc", titulo: "Documentos", render: (e) => <small>NF-e {e.nfe.documentos}{e.nfe.resumos > 0 ? ` (${e.nfe.resumos} só resumo)` : ""}<br />CT-e {e.cte.documentos}{e.falhas > 0 && <><br /><Badge tom="perigo">{e.falhas} com falha</Badge></>}</small> },
@@ -201,6 +228,29 @@ export function DfePage() {
             ]} />
         )}
       </Card>
+
+      <div className={styles.notas}>
+        <Card titulo="Emissão própria" descricao="Importe um XML emitido pela empresa, um por modelo e série. O número e a série vêm do arquivo e servirão de referência para a captura das notas emitidas pela SEFAZ-ES.">
+          <div className={styles.procForm}>
+            <Select rotulo="Empresa" value={cnpjEmissao} onChange={(e) => setCnpjEmissao(e.target.value)}>
+              <option value="">Escolha…</option>
+              {empresas.map((e) => <option key={e.cnpj} value={e.cnpj}>{e.razao || formatarCnpj(e.cnpj)}</option>)}
+            </Select>
+            <Input key={chaveArquivo} rotulo="XML de NF-e, NFC-e ou CT-e" type="file" accept=".xml" multiple onChange={(e) => setArquivosEmissao([...(e.target.files ?? [])])} />
+            <span />
+            <Button variante="primary" carregando={importando} disabled={!cnpjEmissao || !arquivosEmissao.length} onClick={importarXmls}>Importar XML</Button>
+          </div>
+          {emissoes.length > 0 && <DataTable linhas={emissoes} chaveLinha={(e) => `${e.cnpj}-${e.modelo}-${e.serie}`} vazio=""
+            colunas={[
+              { chave: "e", titulo: "Empresa", render: (e) => <>{empresas.find((x) => x.cnpj === e.cnpj)?.razao || "(sem nome)"}<br /><small>{formatarCnpj(e.cnpj)}</small></> },
+              { chave: "m", titulo: "Modelo", render: (e) => ROTULO_MODELO[e.modelo] ?? e.modelo },
+              { chave: "s", titulo: "Série", render: (e) => e.serie },
+              { chave: "n", titulo: "Número", render: (e) => <>{e.numero}<br /><small>{dataBr(e.emissao)}</small></> },
+              { chave: "a", titulo: "Arquivo", render: (e) => <small>{e.arquivo}</small> },
+              { chave: "x", titulo: "", alinhar: "direita", render: (e) => <Button tamanho="sm" variante="danger" onClick={() => void tirarEmissao(e)}>Tirar</Button> },
+            ]} />}
+        </Card>
+      </div>
 
       <div className={styles.notas}>
         <Card titulo="Documentos capturados" descricao="Totais sem canceladas e denegadas. NF-e só com resumo ainda não tem XML completo.">

@@ -48,7 +48,10 @@ function dfeDb() {
         CREATE INDEX IF NOT EXISTS docs_comp ON docs (ambiente, cnpj, servico, competencia);
         CREATE INDEX IF NOT EXISTS docs_ciencia ON docs (ambiente, cnpj, ciencia);
         CREATE TABLE IF NOT EXISTS eventos (ambiente TEXT, cnpj TEXT, servico TEXT, chave TEXT, tipo TEXT, seq TEXT, nsu INTEGER, data TEXT, arquivo TEXT, PRIMARY KEY (ambiente, cnpj, servico, chave, tipo, seq));
+        CREATE TABLE IF NOT EXISTS emissao (cnpj TEXT, modelo TEXT, serie TEXT, numero TEXT, emissao TEXT, chave TEXT, arquivo TEXT, importado_em TEXT, PRIMARY KEY (cnpj, modelo, serie));
         CREATE TABLE IF NOT EXISTS falhas (ambiente TEXT, cnpj TEXT, servico TEXT, nsu INTEGER, motivo TEXT, em TEXT, PRIMARY KEY (ambiente, cnpj, servico, nsu));");
+    // Captura noturna só por escolha: outro sistema no mesmo CNPJ disputa a sequência de NSU da SEFAZ.
+    if (!in_array('captura_auto', array_column($db->query('PRAGMA table_info(empresas)')->fetchAll(), 'name'), true)) $db->exec('ALTER TABLE empresas ADD COLUMN captura_auto INTEGER DEFAULT 0');
     return $db;
 }
 function dfeEstado($amb, $cnpj, $serv) {
@@ -237,7 +240,7 @@ function dfeEventoCiencia($amb, $cnpj, $chave, $pkey, $certPem) {
 
 // ---------- empresas ----------
 function dfeEmpresas($amb, $memDir) {
-    $cfg = []; foreach (dfeDb()->query('SELECT * FROM empresas') as $r) $cfg[$r['cnpj']] = (bool) $r['ciencia_auto'];
+    $cfg = []; $auto = []; foreach (dfeDb()->query('SELECT * FROM empresas') as $r) { $cfg[$r['cnpj']] = (bool) $r['ciencia_auto']; $auto[$r['cnpj']] = (bool) $r['captura_auto']; }
     $tot = [];
     $s = dfeDb()->prepare("SELECT cnpj, servico, COUNT(*) n, SUM(conteudo = 'resumo') resumos, SUM(ciencia = 'pendente') pendentes FROM docs WHERE ambiente = ? GROUP BY cnpj, servico"); $s->execute([$amb]);
     foreach ($s as $r) $tot[$r['cnpj']][$r['servico']] = $r;
@@ -249,7 +252,7 @@ function dfeEmpresas($amb, $memDir) {
     $saida = [];
     foreach (nfseEmpresas($amb, $memDir) as $e) {
         $cert = nfseCertDe($e['cnpj'], $e['certId']);
-        $linha = ['cnpj' => $e['cnpj'], 'razao' => $e['razao'], 'certificado' => nfseProcuradorDados($cert), 'cienciaAuto' => $cfg[$e['cnpj']] ?? false, 'falhas' => $fal[$e['cnpj']] ?? 0];
+        $linha = ['cnpj' => $e['cnpj'], 'razao' => $e['razao'], 'certificado' => nfseProcuradorDados($cert), 'cienciaAuto' => $cfg[$e['cnpj']] ?? false, 'capturaAuto' => $auto[$e['cnpj']] ?? false, 'falhas' => $fal[$e['cnpj']] ?? 0];
         foreach (['nfe', 'cte'] as $sv) {
             $st = $ests[$e['cnpj']][$sv] ?? []; $t = $tot[$e['cnpj']][$sv] ?? [];
             $linha[$sv] = ['ultimoNsu' => (int)($st['ultimo_nsu'] ?? 0), 'maxNsu' => (int)($st['max_nsu'] ?? 0), 'proximaEm' => (int)($st['proxima_em'] ?? 0), 'ultimaCaptura' => $st['ultima_captura'] ?? null, 'ultimoErro' => $st['ultimo_erro'] ?? null,
@@ -260,12 +263,50 @@ function dfeEmpresas($amb, $memDir) {
     return $saida;
 }
 
+/** Lê do XML de uma nota emitida o que identifica a sequência: modelo, série e número. */
+function dfeLerEmissao($xml) {
+    $d = nfseDom($xml); if (!$d) return null;
+    $xp = new DOMXPath($d);
+    $inf = dfeBusca($xp, 'infNFe');
+    if ($inf) { $chave = preg_replace('/^NFe/', '', (string) $inf->getAttribute('Id')); $numero = dfeTexto($xp, $inf, 'ide/nNF'); $data = dfeTexto($xp, $inf, 'ide/dhEmi') ?: dfeTexto($xp, $inf, 'ide/dEmi'); }
+    else {
+        $inf = dfeBusca($xp, 'infCte'); if (!$inf) return null;
+        $chave = preg_replace('/^CTe/', '', (string) $inf->getAttribute('Id')); $numero = dfeTexto($xp, $inf, 'ide/nCT'); $data = dfeTexto($xp, $inf, 'ide/dhEmi');
+    }
+    $n = ['cnpj' => dfeDoc($xp, $inf, 'emit'), 'modelo' => dfeTexto($xp, $inf, 'ide/mod'), 'serie' => dfeTexto($xp, $inf, 'ide/serie'), 'numero' => $numero, 'emissao' => $data, 'chave' => $chave];
+    return in_array($n['modelo'], ['55', '65', '57', '67'], true) && $n['serie'] !== '' && $n['numero'] !== '' ? $n : null;
+}
+
 // ---------- ações ----------
+if ($acao === 'dfeemissao') sai(200, ['emissoes' => dfeDb()->query('SELECT cnpj, modelo, serie, numero, emissao, chave, arquivo, importado_em FROM emissao ORDER BY cnpj, modelo, serie')->fetchAll()]);
+
+if ($acao === 'dfeemissaoimportar') { // emitente, modelo, série e número vêm do XML; repetir a série substitui a referência
+    $cnpj = nfseCnpj($in['cnpj'] ?? ''); $xml = (string)($in['xml'] ?? ''); $nome = mb_substr(basename((string)($in['arquivo'] ?? '')), 0, 120);
+    if ($xml === '' || strlen($xml) > 3000000) sai(400, ['erro' => 'Arquivo XML inválido.']);
+    $n = dfeLerEmissao($xml);
+    if (!$n) sai(400, ['erro' => "$nome: não é o XML de uma NF-e, NFC-e ou CT-e."]);
+    if ($n['cnpj'] !== $cnpj) sai(400, ['erro' => "$nome: o emitente deste XML é " . $n['cnpj'] . ', não a empresa escolhida.']);
+    dfeDb()->prepare('INSERT OR REPLACE INTO emissao (cnpj, modelo, serie, numero, emissao, chave, arquivo, importado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        ->execute([$cnpj, $n['modelo'], $n['serie'], $n['numero'], $n['emissao'], $n['chave'], $nome, date('c')]);
+    sai(200, ['ok' => true] + $n);
+}
+
+if ($acao === 'dfeemissaoexcluir') {
+    dfeDb()->prepare('DELETE FROM emissao WHERE cnpj = ? AND modelo = ? AND serie = ?')->execute([nfseCnpj($in['cnpj'] ?? ''), (string)($in['modelo'] ?? ''), (string)($in['serie'] ?? '')]);
+    sai(200, ['ok' => true]);
+}
+
 if ($acao === 'dfeempresas') sai(200, ['empresas' => dfeEmpresas($nfseAmb, $memDir)]);
 
 if ($acao === 'dfeciencia_config') {
     $cnpj = nfseCnpj($in['cnpj'] ?? '');
     dfeDb()->prepare('INSERT INTO empresas (cnpj, ciencia_auto) VALUES (?, ?) ON CONFLICT (cnpj) DO UPDATE SET ciencia_auto = excluded.ciencia_auto')->execute([$cnpj, empty($in['ativo']) ? 0 : 1]);
+    sai(200, ['empresas' => dfeEmpresas($nfseAmb, $memDir)]);
+}
+
+if ($acao === 'dfecaptura_config') {
+    $cnpj = nfseCnpj($in['cnpj'] ?? '');
+    dfeDb()->prepare('INSERT INTO empresas (cnpj, captura_auto) VALUES (?, ?) ON CONFLICT (cnpj) DO UPDATE SET captura_auto = excluded.captura_auto')->execute([$cnpj, empty($in['ativo']) ? 0 : 1]);
     sai(200, ['empresas' => dfeEmpresas($nfseAmb, $memDir)]);
 }
 
@@ -294,7 +335,14 @@ if ($acao === 'dfecapturar') {
     $ult = (int) dfeTexto($xp, $no, 'ultNSU'); $max = (int) dfeTexto($xp, $no, 'maxNSU');
     $agora = date('c');
     if ($cstat === '656') {
-        dfeEstadoAtualiza($nfseAmb, $cnpj, $serv, ['proxima_em' => time() + DFE_ESPERA_S, 'ultimo_erro' => "656 $motivo"]);
+        // A 656 devolve o último NSU já consultado para o CNPJ (NT 2014.002, desde a v1.14): a captura segue dele.
+        $aviso = "656 $motivo";
+        $campos = ['proxima_em' => time() + DFE_ESPERA_S];
+        if ($ult > 0 && $ult !== $nsu) {
+            $campos['ultimo_nsu'] = $ult;
+            $aviso = "Outro sistema ou consulta já usou este CNPJ até o NSU $ult. A captura continua a partir dele; o que veio antes só pode ser obtido naquele sistema.";
+        }
+        dfeEstadoAtualiza($nfseAmb, $cnpj, $serv, $campos + ['ultimo_erro' => $aviso]);
         sai(200, ['status' => 'aguardar', 'segundos' => DFE_ESPERA_S, 'mensagem' => 'A SEFAZ bloqueou a consulta por 1 hora (consumo indevido).']);
     }
     if ($cstat === '137') {
