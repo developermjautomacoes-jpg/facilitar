@@ -29,11 +29,7 @@ if (SENHA_ACESSO === 'TROQUE-ESTA-SENHA') {
 
 // O retorno do login do Google (google-retorno.php) chega sem o cabeçalho X-Senha; ele é validado pelo "state" de uso único.
 $retornoGoogle = ($_GET['acao'] ?? '') === 'agendaoauthretorno';
-$senha = $_SERVER['HTTP_X_SENHA'] ?? '';
-if (!$retornoGoogle && (!is_string($senha) || !hash_equals(SENHA_ACESSO, $senha))) {
-    usleep(400000); // dificulta tentativas em série
-    sai(401, ['erro' => 'Senha inválida.']);
-}
+require __DIR__ . '/auth.php'; // acessos individuais, níveis e empresas restritas
 
 $base   = rtrim(getenv('DADOS_DIR') ?: (__DIR__ . '/dados'), '/');
 $memDir = $base . '/memorandos';
@@ -60,13 +56,18 @@ function grava($f, $m) {
 $acao = $_GET['acao'] ?? '';
 $in = json_decode(file_get_contents('php://input'), true);
 if (!is_array($in)) $in = [];
+if ($AUTH) { $in['usuario'] = $AUTH['nome']; if (isset($_GET['usuario'])) $_GET['usuario'] = $AUTH['nome']; } // o autor vem da sessão, não do navegador
+if (in_array($acao, ['status', 'cliente', 'excluir', 'salvar'], true) && !empty($in['id']) && idValido($in['id'])) { // memorando de empresa restrita
+    $mRestrito = ler(arq($memDir, $in['id']));
+    if ($mRestrito && !authMemoVisivel($mRestrito)) sai(403, ['erro' => 'Empresa restrita.']);
+}
 
 // ---------- listar ----------
 if ($acao === 'listar') {
     $out = [];
     foreach (glob($memDir . '/*.json') as $f) {
         $m = ler($f);
-        if ($m) { $m['_id'] = basename($f, '.json'); $out[] = $m; }
+        if ($m && authMemoVisivel($m)) { $m = authLimpaMemo($m); $m['_id'] = basename($f, '.json'); $out[] = $m; }
     }
     usort($out, function ($a, $b) { return [$b['ano'] ?? 0, $b['seq'] ?? 0] <=> [$a['ano'] ?? 0, $a['seq'] ?? 0]; });
     sai(200, ['memorandos' => $out]);
@@ -184,7 +185,7 @@ function certPem($id, &$erro) {
     return $pem;
 }
 function limparPems() { foreach (glob(sys_get_temp_dir() . '/memo-cert-*.pem') ?: [] as $f) @unlink($f); }
-if ($acao === 'certlistar') sai(200, ['certificados' => certLista()]);
+if ($acao === 'certlistar') sai(200, ['certificados' => array_values(array_filter(certLista(), function ($c) { return !authCnpjOculto($c['documento'] ?? ''); }))]);
 
 function soapCadastro($url, $xml, $pem, $verificar) {
     $env = '<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/CadConsultaCadastro4">' . $xml . '</nfeDadosMsg></soap12:Body></soap12:Envelope>';
@@ -721,7 +722,7 @@ if (in_array($acao, ['planlistar', 'planler', 'plansalvar', 'planexcluir'], true
 }
 if ($acao === 'planlistar') {
     $out = [];
-    foreach (glob($planDir . '/*.json') as $f) { $p = ler($f); if ($p && isset($p['id'])) $out[] = planMeta($p); }
+    foreach (glob($planDir . '/*.json') as $f) { $p = ler($f); if ($p && isset($p['id']) && !authTextoOculto($p['cliente'] ?? '')) $out[] = planMeta($p); }
     usort($out, function ($a, $b) { return strcmp($b['atualizadoEm'], $a['atualizadoEm']); });
     sai(200, ['planejamentos' => $out]);
 }
@@ -729,7 +730,7 @@ if ($acao === 'planler') {
     $id = $_GET['id'] ?? '';
     if (!planIdValido($id)) sai(400, ['erro' => 'Pedido inválido.']);
     $p = ler($planDir . '/' . $id . '.json');
-    if (!$p) sai(404, ['erro' => 'Planejamento não encontrado.']);
+    if (!$p || authTextoOculto($p['cliente'] ?? '')) sai(404, ['erro' => 'Planejamento não encontrado.']);
     sai(200, ['planejamento' => $p]);
 }
 if ($acao === 'plansalvar') {

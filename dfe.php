@@ -278,7 +278,7 @@ function dfeLerEmissao($xml) {
 }
 
 // ---------- ações ----------
-if ($acao === 'dfeemissao') sai(200, ['emissoes' => dfeDb()->query('SELECT cnpj, modelo, serie, numero, emissao, chave, arquivo, importado_em FROM emissao ORDER BY cnpj, modelo, serie')->fetchAll()]);
+if ($acao === 'dfeemissao') sai(200, ['emissoes' => array_values(array_filter(dfeDb()->query('SELECT cnpj, modelo, serie, numero, emissao, chave, arquivo, importado_em FROM emissao ORDER BY cnpj, modelo, serie')->fetchAll(), function ($e) { return !authCnpjOculto($e['cnpj']); }))]);
 
 if ($acao === 'dfeemissaoimportar') { // emitente, modelo, série e número vêm do XML; repetir a série substitui a referência
     $cnpj = nfseCnpj($in['cnpj'] ?? ''); $xml = (string)($in['xml'] ?? ''); $nome = mb_substr(basename((string)($in['arquivo'] ?? '')), 0, 120);

@@ -2,10 +2,28 @@ import { useEffect, useState, type ChangeEvent } from "react";
 import { Avatar, Button, Card, ImageCropper, Input, Modal, PageHeader, useToast } from "@/components/ui";
 import { dataHora } from "@/lib/format";
 import { useAuth } from "@/features/auth/AuthContext";
+import { trocarSenha } from "@/services/authService";
 import { usePerfil } from "./PerfilContext";
 import styles from "./PerfilPage.module.css";
 
 const VAZIO = { nomeExibicao: "", cargo: "", email: "", telefone: "", foto: "" };
+
+function CartaoSenha() {
+  const avisar = useToast();
+  const [atual, setAtual] = useState("");
+  const [nova, setNova] = useState("");
+  async function salvarSenha() {
+    try { await trocarSenha(atual, nova); setAtual(""); setNova(""); avisar("Senha alterada.", "sucesso"); }
+    catch (x) { avisar(x instanceof Error ? x.message : "Não foi possível alterar.", "erro"); }
+  }
+  return (
+    <Card titulo="Trocar senha">
+      <Input rotulo="Senha atual" type="password" autoComplete="current-password" value={atual} onChange={(e) => setAtual(e.target.value)} />
+      <Input rotulo="Nova senha" type="password" autoComplete="new-password" dica="Mínimo de 8 caracteres." value={nova} onChange={(e) => setNova(e.target.value)} />
+      <Button variante="primary" disabled={!atual || !nova} onClick={salvarSenha}>Alterar senha</Button>
+    </Card>
+  );
+}
 
 export function PerfilPage() {
   const { usuario } = useAuth();
@@ -70,6 +88,7 @@ export function PerfilPage() {
           </div>
         </Card>
       </div>
+      <div style={{ marginTop: 20, maxWidth: 480 }}><CartaoSenha /></div>
       <Modal aberto={!!original} titulo="Ajustar foto" onFechar={() => setOriginal("")} largura="sm"
         rodape={<><Button onClick={() => setOriginal("")}>Cancelar</Button><Button variante="primary" onClick={aplicarRecorte}>Usar esta foto</Button></>}>
         {original && <ImageCropper imagem={original} onRecorte={setRecorte} />}

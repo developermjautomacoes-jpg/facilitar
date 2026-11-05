@@ -363,6 +363,7 @@ function nfseEmpresas($amb, $memDir) {
         $saida[] = $e + ['modo' => $modo, 'certificado' => nfseProcuradorDados($cert),
             'ultimoNsu' => (int) $st['ultimo_nsu'], 'ultimaCaptura' => $st['ultima_captura'], 'ultimoErro' => $st['ultimo_erro'], 'notas' => $totais[$e['cnpj']] ?? 0, 'falhas' => $falhas[$e['cnpj']] ?? 0];
     }
+    $saida = array_values(array_filter($saida, function ($e) { return !authCnpjOculto($e['cnpj']) && !authTextoOculto($e['razao']); }));
     usort($saida, function ($a, $b) { return strcasecmp($a['razao'], $b['razao']); });
     return $saida;
 }
@@ -377,7 +378,7 @@ function nfseAgenda() {
 }
 function nfseAgendaGrava($a) { nfseDb()->prepare("INSERT OR REPLACE INTO config (chave, valor) VALUES ('agenda', ?)")->execute([json_encode($a, JSON_UNESCAPED_UNICODE)]); return $a; }
 
-if ($acao === 'nfseagenda') sai(200, nfseAgenda());
+if ($acao === 'nfseagenda') { $a = nfseAgenda(); $a['linhas'] = array_values(array_filter($a['linhas'], function ($l) { return !authTextoOculto($l); })); sai(200, $a); }
 
 if ($acao === 'nfseagendasalvar') {
     $hora = (string)($in['hora'] ?? '');

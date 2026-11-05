@@ -22,18 +22,18 @@ export function aoPerderAcesso(fn: (() => void) | null): void { aoNaoAutorizado 
 interface Opcoes {
   corpo?: unknown;
   query?: Record<string, string>;
-  credencialAvulsa?: Credencial; // usada só no login, antes de guardar a credencial
+  publica?: boolean; // login e primeiro acesso: ainda não há sessão
 }
 
 export async function chamarApi<T>(acao: string, opcoes: Opcoes = {}): Promise<T> {
-  const cred = opcoes.credencialAvulsa ?? credencial;
-  if (!cred) throw new ApiError("Entre com a senha de acesso.", 401);
+  const cred = credencial;
+  if (!cred && !opcoes.publica) throw new ApiError("Entre com seu usuário e senha.", 401);
   const params = new URLSearchParams({ acao, ...(opcoes.query ?? {}) });
   let resposta: Response;
   try {
     resposta = await fetch(`${API_URL}?${params.toString()}`, {
       method: opcoes.corpo !== undefined ? "POST" : "GET",
-      headers: { "Content-Type": "application/json", "X-Senha": cred.senha },
+      headers: { "Content-Type": "application/json", ...(cred ? { "X-Senha": cred.senha } : {}) },
       body: opcoes.corpo !== undefined ? JSON.stringify(opcoes.corpo) : undefined,
       cache: "no-store",
     });
@@ -43,8 +43,8 @@ export async function chamarApi<T>(acao: string, opcoes: Opcoes = {}): Promise<T
   let json: (T & { erro?: string }) | null = null;
   try { json = (await resposta.json()) as T & { erro?: string }; } catch { /* resposta sem JSON */ }
   if (resposta.status === 401) {
-    if (!opcoes.credencialAvulsa && aoNaoAutorizado) aoNaoAutorizado();
-    throw new ApiError(json?.erro ?? "Senha inválida.", 401);
+    if (!opcoes.publica && aoNaoAutorizado) aoNaoAutorizado();
+    throw new ApiError(json?.erro ?? "Sessão encerrada.", 401);
   }
   if (!resposta.ok || (json && json.erro)) {
     throw new ApiError(json?.erro ?? `Erro no servidor (${resposta.status}).`, resposta.status);

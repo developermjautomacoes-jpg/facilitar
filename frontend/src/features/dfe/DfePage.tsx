@@ -201,10 +201,11 @@ export function DfePage() {
       {ambiente === "restrita" && <Notice tom="alerta">Homologação: os documentos deste ambiente não têm validade fiscal e ficam separados dos de produção.</Notice>}
       <Notice tom="alerta">Etapa 1: documentos recebidos. NF-e e CT-e emitidos pela empresa e NFC-e não saem do Ambiente Nacional e virão pela SEFAZ-ES. Só ficam disponíveis os últimos 90 dias, e o sistema guarda a partir de 2 meses antes da primeira captura.</Notice>
 
-      <Card titulo="Empresas" descricao="Vêm da Captura de NFS-e. Aqui vale só o certificado da empresa, de mesma raiz do CNPJ; a procuração da NFS-e não serve. Sem novidade, a SEFAZ só aceita nova consulta após 1 hora. Ligue a captura noturna só onde nenhum outro sistema captura o mesmo CNPJ." semPadding>
+      <Card titulo="Empresas" descricao="Vêm da Captura de NFS-e. Aqui vale só o certificado da empresa, de mesma raiz do CNPJ; a procuração da NFS-e não serve. Sem novidade, a SEFAZ só aceita nova consulta após 1 hora. Ligue a captura noturna só onde nenhum outro sistema captura o mesmo CNPJ. Para adiantar, use “Antecipar busca noturna” e capture." semPadding>
         <div className={styles.barra}>
           <Button tamanho="sm" onClick={() => setMarcadas(new Set(aptas.map((e) => e.cnpj)))} disabled={ocupado || !aptas.length}>Marcar todas aptas</Button>
           <Button tamanho="sm" onClick={() => setMarcadas(new Set())} disabled={ocupado}>Limpar</Button>
+          <Button tamanho="sm" onClick={() => setMarcadas(new Set(aptas.filter((e) => e.capturaAuto).map((e) => e.cnpj)))} disabled={ocupado || !aptas.some((e) => e.capturaAuto)}>Antecipar busca noturna</Button>
           <span className={styles.espaco} />
           {progresso ? <Button variante="danger" onClick={() => { parar.current = true; }}>Interromper</Button>
             : <Button variante="primary" onClick={capturar} disabled={!marcadas.size}>Capturar selecionadas ({marcadas.size})</Button>}
