@@ -52,7 +52,37 @@ function executar($dia, $limite) {
         usleep(2500000);
     }
     if (!$linhas) $linhas[] = 'Nenhuma empresa com certificado válido.';
+    $linhas = array_merge($linhas, executarDfe($limite));
     api('nfseagendaresultado', ['dia' => $dia, 'status' => 'concluido', 'linhas' => $linhas]);
+}
+
+/** NF-e e CT-e pelo Ambiente Nacional. Sem novidade, a SEFAZ só aceita nova consulta depois de 1 hora; a empresa fica para a próxima noite. */
+function executarDfe($limite) {
+    $hoje = date('Y-m-d'); $linhas = [];
+    foreach (api('dfeempresas')['empresas'] ?? [] as $e) {
+        if (empty($e['certificado']) || ($e['certificado']['validade'] ?? '') < $hoje) continue;
+        $tot = ['notas' => 0, 'eventos' => 0, 'falhas' => 0]; $texto = '';
+        foreach (['nfe', 'cte'] as $servico) {
+            while (time() < $limite) {
+                $p = api('dfecapturar', ['cnpj' => $e['cnpj'], 'servico' => $servico, 'ambiente' => 'producao']);
+                if (!$p) { $texto = 'sem resposta do sistema'; break 2; }
+                $st = $p['status'] ?? '';
+                if ($st === 'lote' || $st === 'fim') {
+                    foreach ($tot as $k => $v) $tot[$k] = $v + (int)($p[$k] ?? 0);
+                    if ($st === 'fim') break;
+                    usleep(2500000);
+                } elseif ($st === 'aguardar') {
+                    if ((int)($p['segundos'] ?? 60) > ESPERA_MAXIMA_S) break;
+                    sleep(max(1, (int)($p['segundos'] ?? 5)));
+                } else { $texto = (string)($p['mensagem'] ?? 'erro na captura'); break; }
+            }
+            usleep(2500000);
+        }
+        do { $c = api('dfecienciaenviar', ['cnpj' => $e['cnpj'], 'ambiente' => 'producao']); usleep(1500000); } while (time() < $limite && ($c['status'] ?? '') === 'ok' && (int)($c['enviadas'] ?? 0) > 0 && (int)($c['restantes'] ?? 0) > 0);
+        if (($c['status'] ?? '') === 'erro') $texto = trim($texto . ' ciência: ' . ($c['mensagem'] ?? ''));
+        if ($tot['notas'] || $tot['eventos'] || $tot['falhas'] || $texto) $linhas[] = 'NF-e/CT-e ' . (($e['razao'] ?? '') ?: $e['cnpj']) . ": {$tot['notas']} documento(s) novo(s), {$tot['eventos']} evento(s)" . ($tot['falhas'] ? ", {$tot['falhas']} com falha" : '') . ($texto ? " ($texto)" : '');
+    }
+    return $linhas;
 }
 
 do {

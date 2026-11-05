@@ -627,4 +627,4 @@ if ($acao === 'nfsezip') {
     exit;
 }
 
-sai(400, ['erro' => 'Ação desconhecida.']);
+if (strpos($acao, 'dfe') !== 0) sai(400, ['erro' => 'Ação desconhecida.']);

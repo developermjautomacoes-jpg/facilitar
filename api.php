@@ -796,4 +796,7 @@ if ($acao === 'cliente') {
 // Captura de NFS-e pelo ADN
 if (strpos($acao, 'nfse') === 0) require __DIR__ . '/nfse.php';
 
+// Captura de NF-e e CT-e pelo Ambiente Nacional (usa as funções do nfse.php)
+if (strpos($acao, 'dfe') === 0) { require __DIR__ . '/nfse.php'; require __DIR__ . '/dfe.php'; }
+
 sai(400, ['erro' => 'Ação desconhecida.']);
