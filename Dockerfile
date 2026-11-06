@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libzip-dev && d
 COPY --from=frontend /app/dist/ /var/www/html/
 COPY --from=frontend /app/dist/ /var/www/html/memorandos/
 COPY api.php auth.php nfse.php dfe.php google-retorno.php exportar-neeko.php /var/www/html/
-COPY api.php auth.php nfse.php dfe.php google-retorno.php /var/www/html/memorandos/
+COPY api.php auth.php nfse.php dfe.php google-retorno.php exportar-neeko.php /var/www/html/memorandos/
 # Formulário do memorando (consulta CNPJ/IE, prévia, PDF e Word), aberto pelo front-end em modo embutido
 COPY legado/index.html /var/www/html/legado/index.html
 COPY legado/index.html /var/www/html/memorandos/legado/index.html
